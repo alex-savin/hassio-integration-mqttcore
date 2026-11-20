@@ -1,0 +1,5 @@
+{
+  "certificate": true,
+  "client_ca": false,
+  "https": false
+}

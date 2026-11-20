@@ -1,0 +1,80 @@
+{
+  "generation": 42,
+  "login": true,
+  "user": "admin",
+  "session_minutes": 720,
+  "trusted_networks": [
+    "192.0.2.0/24"
+  ],
+  "ota_password_set": true,
+  "server_name": "mqtt.example.com",
+  "host_name": "mqtt01.example.com",
+  "update_url": "https://ota.mqttcore.pro",
+  "force_https": true,
+  "allow_anonymous": false,
+  "retain_mode": "raft",
+  "acme_enabled": true,
+  "acme_staging": false,
+  "acme_domain": "",
+  "acme_email": "admin@example.com",
+  "cloudflare_zone_id": "0123456789abcdef",
+  "cloudflare_token_set": true,
+  "listeners": {
+    "mqtt": {
+      "enabled": true,
+      "port": 1883
+    },
+    "mqtts": {
+      "enabled": true,
+      "port": 8883
+    },
+    "ws": {
+      "enabled": true,
+      "port": 8083
+    },
+    "wss": {
+      "enabled": true,
+      "port": 8084
+    },
+    "http": {
+      "enabled": true,
+      "port": 80
+    },
+    "https": {
+      "enabled": true,
+      "port": 443
+    },
+    "ws_path": "/mqtt"
+  },
+  "cluster": {
+    "enabled": true,
+    "name": "house",
+    "secret_set": true,
+    "gossip_port": 7946,
+    "peer_port": 1885,
+    "seeds": [],
+    "advertise": "",
+    "fwd_max_bytes": 262144,
+    "fwd_hold_ms": 1000,
+    "isolated": false,
+    "seed_srv": ""
+  },
+  "dns": {
+    "mode": "dynamic",
+    "domain": "example.com",
+    "zone": "",
+    "server": "192.0.2.2",
+    "tsig_name": "mqttcore",
+    "tsig_secret_set": true,
+    "ttl": 30,
+    "ttl_min": 5,
+    "ttl_max": 3600,
+    "weight_steering": false
+  },
+  "balance": {
+    "enabled": true,
+    "threshold_pct": 25,
+    "min_clients": 20
+  },
+  "restart_needed": false
+}

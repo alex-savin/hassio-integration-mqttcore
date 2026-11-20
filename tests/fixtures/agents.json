@@ -1,0 +1,18 @@
+{
+  "tokens": [
+    {
+      "name": "prometheus",
+      "scopes": {
+        "status": "read",
+        "clients": "none",
+        "access": "none",
+        "system": "none"
+      },
+      "expires_at": 0,
+      "created": 1793000000,
+      "networks": [
+        "192.0.2.50/32"
+      ]
+    }
+  ]
+}

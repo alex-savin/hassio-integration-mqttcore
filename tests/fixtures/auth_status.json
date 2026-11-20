@@ -1,0 +1,8 @@
+{
+  "login": true,
+  "session": false,
+  "setup_needed": false,
+  "trusted_network": false,
+  "sessions": 1,
+  "https": true
+}

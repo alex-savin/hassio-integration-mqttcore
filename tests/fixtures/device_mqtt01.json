@@ -1,0 +1,34 @@
+{
+  "version": "0.29.1",
+  "build": "p4-v0.29.1-0-g0123456789ab",
+  "node": "mqttcore-005309",
+  "port": "esp32p4",
+  "uptime_s": 86412,
+  "wall_clock": true,
+  "mac": "00:00:5e:00:53:09",
+  "chip": {
+    "model": "esp32p4",
+    "revision": "v3.2",
+    "image": "rev3"
+  },
+  "idf": "v6.1",
+  "last_reset": {
+    "reason": "software",
+    "raw": 3
+  },
+  "emac_at_boot": {
+    "live": false,
+    "clock_on": true,
+    "rx_on": false,
+    "rx_state": 0,
+    "tx_state": 0,
+    "settled": true,
+    "reset": true,
+    "missed": 0,
+    "rx_desc": "0x4ff4a0c0",
+    "rx_buf": "0x4ff4b800"
+  },
+  "coredump": {
+    "stored": false
+  }
+}

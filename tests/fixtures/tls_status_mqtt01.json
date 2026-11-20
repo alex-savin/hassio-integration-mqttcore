@@ -1,0 +1,23 @@
+{
+  "certificate": true,
+  "client_ca": false,
+  "https": true,
+  "subject": "CN=mqtt.example.com",
+  "issuer": "C=US, O=Let's Encrypt, CN=R11",
+  "not_before": "2026-11-01T08:12:00Z",
+  "not_before_epoch": 1793520720,
+  "not_after": "2027-01-30T08:11:59Z",
+  "not_after_epoch": 1801296719,
+  "days_left": 71,
+  "expired": false,
+  "dns_names": [
+    "mqtt.example.com",
+    "mqtt01.example.com",
+    "mqtt04.example.com",
+    "mqtt05.example.com"
+  ],
+  "key_type": "EC P-256",
+  "self_issued": false,
+  "staging": false,
+  "chain_len": 2
+}

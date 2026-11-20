@@ -1,0 +1,14 @@
+{
+  "version": "0.29.1",
+  "build": "p4-v0.29.1-0-g0123456789ab",
+  "node": "",
+  "port": "posix",
+  "uptime_s": 13284129,
+  "wall_clock": true,
+  "mac": null,
+  "chip": null,
+  "idf": null,
+  "last_reset": null,
+  "emac_at_boot": null,
+  "coredump": null
+}
