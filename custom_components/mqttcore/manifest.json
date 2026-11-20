@@ -1,0 +1,25 @@
+{
+  "domain": "mqttcore",
+  "name": "mqttcore",
+  "categories": [
+    "diy_makers",
+    "computers_network.monitoring"
+  ],
+  "codeowners": [],
+  "config_flow": true,
+  "connectivity": [
+    "network"
+  ],
+  "dependencies": [
+    "network"
+  ],
+  "documentation": "https://github.com/alex-savin/hassio-integration-mqttcore",
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/alex-savin/hassio-integration-mqttcore/issues",
+  "requirements": [],
+  "version": "0.1.0",
+  "zeroconf": [
+    "_mqttcore._tcp.local."
+  ]
+}

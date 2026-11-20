@@ -1,0 +1,110 @@
+{
+  "entity": {
+    "binary_sensor": {
+      "alive": {
+        "default": "mdi:server",
+        "state": {
+          "off": "mdi:server-off"
+        }
+      },
+      "balancing": {
+        "default": "mdi:scale-balance"
+      },
+      "certificate_problem": {
+        "default": "mdi:shield-check",
+        "state": {
+          "on": "mdi:shield-alert"
+        }
+      },
+      "crash_dump": {
+        "default": "mdi:bug"
+      },
+      "draining": {
+        "default": "mdi:exit-run"
+      },
+      "leader": {
+        "default": "mdi:crown-outline",
+        "state": {
+          "on": "mdi:crown"
+        }
+      },
+      "link": {
+        "default": "mdi:link-variant",
+        "state": {
+          "off": "mdi:link-variant-off"
+        }
+      },
+      "raft_problem": {
+        "default": "mdi:vote"
+      },
+      "redirecting": {
+        "default": "mdi:directions-fork"
+      },
+      "settings_problem": {
+        "default": "mdi:cog-sync"
+      }
+    },
+    "sensor": {
+      "acme_last_success": {
+        "default": "mdi:certificate-outline"
+      },
+      "acme_state": {
+        "default": "mdi:certificate"
+      },
+      "certificate_expiry": {
+        "default": "mdi:certificate"
+      },
+      "connections": {
+        "default": "mdi:lan-connect"
+      },
+      "dropped_messages": {
+        "default": "mdi:delete-empty"
+      },
+      "failed_logins": {
+        "default": "mdi:account-cancel"
+      },
+      "leader": {
+        "default": "mdi:crown"
+      },
+      "member_state": {
+        "default": "mdi:server-network"
+      },
+      "members": {
+        "default": "mdi:server-network"
+      },
+      "members_alive": {
+        "default": "mdi:server-network"
+      },
+      "memory_internal_free": {
+        "default": "mdi:memory"
+      },
+      "memory_psram_free": {
+        "default": "mdi:memory"
+      },
+      "messages_in_rate": {
+        "default": "mdi:message-arrow-left"
+      },
+      "messages_out_rate": {
+        "default": "mdi:message-arrow-right"
+      },
+      "raft_store_errors": {
+        "default": "mdi:database-alert"
+      },
+      "raft_term": {
+        "default": "mdi:vote"
+      },
+      "retained": {
+        "default": "mdi:pin"
+      },
+      "sessions": {
+        "default": "mdi:account-multiple"
+      },
+      "subscriptions": {
+        "default": "mdi:format-list-bulleted"
+      },
+      "version": {
+        "default": "mdi:tag"
+      }
+    }
+  }
+}

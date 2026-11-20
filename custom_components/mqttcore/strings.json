@@ -1,0 +1,209 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "This mqttcore cluster is already set up.",
+      "invalid_discovery_info": "The mqttcore app's announcement did not say where it answers.",
+      "reauth_successful": "A new API token is in place.",
+      "wrong_cluster": "That node belongs to another cluster than the one this entry follows."
+    },
+    "error": {
+      "cannot_connect": "Failed to connect.",
+      "host_not_allowed": "The node does not answer to this name (HTTP 421). Use its IP address, its own DNS name, or the cluster's name.",
+      "https_required": "mqttcore refuses passwords and tokens over plain HTTP while its HTTPS works. Turn on HTTPS under Connection.",
+      "invalid_auth": "Wrong OTA password.",
+      "invalid_certificate": "The node's certificate could not be verified. Use the name on its certificate, or turn off certificate verification under Connection.",
+      "invalid_network": "Enter up to four IP addresses or ranges (such as 192.0.2.10 or 192.0.2.0/24), separated by commas, or leave it empty.",
+      "not_mqttcore": "That address answers, but not as an mqttcore node.",
+      "setup_needed": "This node is not set up yet: set its OTA password in its console first.",
+      "token_not_accepted": "The new API token was made, but the node did not accept it. Try again in a minute.",
+      "token_refused": "The node refused to make the API token: {error}",
+      "too_many_attempts": "Too many wrong passwords from this address. Wait a few minutes and try again.",
+      "unknown": "Unexpected error."
+    },
+    "flow_title": "{name}",
+    "step": {
+      "credentials": {
+        "data": {
+          "ota_password": "OTA password",
+          "restrict_network": "Limit the token to"
+        },
+        "data_description": {
+          "ota_password": "Used once to make a read-only API token for Home Assistant, then forgotten. Home Assistant never stores it.",
+          "restrict_network": "The token then works only from these addresses or ranges (up to four). The address Home Assistant used to reach the node is filled in; leave it empty to allow any."
+        },
+        "description": "{host} answers. Enter the cluster's OTA password to make an API token for Home Assistant: it reads the status and system areas, and nothing else."
+      },
+      "hassio_confirm": {
+        "description": "Set up the mqttcore cluster the {addon} app belongs to?",
+        "title": "mqttcore through the Home Assistant app"
+      },
+      "reauth_confirm": {
+        "data": {
+          "ota_password": "OTA password",
+          "restrict_network": "Limit the token to"
+        },
+        "data_description": {
+          "ota_password": "Used once to make a read-only API token for Home Assistant, then forgotten. Home Assistant never stores it.",
+          "restrict_network": "The token then works only from these addresses or ranges (up to four). The address Home Assistant used to reach the node is filled in; leave it empty to allow any."
+        },
+        "description": "The API token for {host} no longer works (revoked, or limited to another address). Enter the OTA password to make a new one.",
+        "title": "Make a new API token"
+      },
+      "user": {
+        "data": {
+          "host": "Host",
+          "port": "Port"
+        },
+        "data_description": {
+          "host": "One node of the cluster: its DNS name (as on its certificate), the cluster's name, or an IP address. Home Assistant learns the other members from it.",
+          "port": "The node's HTTPS port: 443 unless you moved it."
+        },
+        "description": "Connect to an mqttcore node's admin API.",
+        "sections": {
+          "connection": {
+            "data": {
+              "ssl": "Use HTTPS",
+              "verify_ssl": "Verify the certificate"
+            },
+            "data_description": {
+              "ssl": "mqttcore accepts API tokens over plain HTTP only from the node itself (loopback).",
+              "verify_ssl": "Leave on for a certificate from Let's Encrypt. Turn off only for a self-signed certificate."
+            },
+            "name": "Connection"
+          }
+        }
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "alive": {
+        "name": "Alive"
+      },
+      "balancing": {
+        "name": "Load balancing"
+      },
+      "certificate_problem": {
+        "name": "Certificate"
+      },
+      "crash_dump": {
+        "name": "Crash dump"
+      },
+      "draining": {
+        "name": "Draining"
+      },
+      "leader": {
+        "name": "Leader"
+      },
+      "link": {
+        "name": "Link to {peer}"
+      },
+      "raft_problem": {
+        "name": "Raft"
+      },
+      "redirecting": {
+        "name": "Redirecting new clients"
+      },
+      "settings_problem": {
+        "name": "Shared settings"
+      }
+    },
+    "sensor": {
+      "acme_last_success": {
+        "name": "Last certificate renewal"
+      },
+      "acme_state": {
+        "name": "Certificate renewal",
+        "state": {
+          "failed": "Failed",
+          "idle": "Idle",
+          "ok": "OK",
+          "running": "Running"
+        }
+      },
+      "bytes_in_rate": {
+        "name": "Data received"
+      },
+      "bytes_out_rate": {
+        "name": "Data sent"
+      },
+      "certificate_expiry": {
+        "name": "Certificate expiry"
+      },
+      "connections": {
+        "name": "Connections"
+      },
+      "dropped_messages": {
+        "name": "Dropped messages"
+      },
+      "failed_logins": {
+        "name": "Failed logins"
+      },
+      "leader": {
+        "name": "Leader"
+      },
+      "member_state": {
+        "name": "Member state",
+        "state": {
+          "alive": "Alive",
+          "dead": "Dead",
+          "left": "Left",
+          "suspect": "Suspect"
+        }
+      },
+      "members": {
+        "name": "Members"
+      },
+      "members_alive": {
+        "name": "Members alive"
+      },
+      "memory_internal_free": {
+        "name": "Internal memory free"
+      },
+      "memory_psram_free": {
+        "name": "PSRAM free"
+      },
+      "messages_in_rate": {
+        "name": "Messages received"
+      },
+      "messages_out_rate": {
+        "name": "Messages sent"
+      },
+      "raft_store_errors": {
+        "name": "Raft store errors"
+      },
+      "raft_term": {
+        "name": "Raft term"
+      },
+      "retained": {
+        "name": "Retained messages"
+      },
+      "sessions": {
+        "name": "Sessions"
+      },
+      "subscriptions": {
+        "name": "Subscriptions"
+      },
+      "uptime": {
+        "name": "Uptime"
+      },
+      "version": {
+        "name": "Version"
+      }
+    }
+  },
+  "exceptions": {
+    "cluster_unreachable": {
+      "message": "No member of the cluster answered: {error}"
+    },
+    "node_unreachable": {
+      "message": "The node did not answer, directly or through the cluster: {error}"
+    },
+    "token_refused": {
+      "message": "The node refused the API token: {error}"
+    },
+    "token_rejected": {
+      "message": "The node no longer accepts the API token: it was revoked or has expired."
+    }
+  }
+}
