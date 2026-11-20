@@ -1,0 +1,125 @@
+[project]
+name = "hassio-integration-mqttcore"
+version = "0.1.0"
+description = "Home Assistant custom integration for the mqttcore MQTT broker cluster"
+readme = "README.md"
+requires-python = ">=3.14.2"
+# No license yet: the owner decides (Apache-2.0 recommended; see README).
+
+[tool.ruff]
+target-version = "py314"
+line-length = 88
+extend-exclude = [".venv", ".mqttcore-run"]
+
+[tool.ruff.lint]
+select = [
+  "A",     # builtins shadowed
+  "ASYNC", # blocking calls in async code
+  "B",     # bugbear
+  "BLE",   # blind except
+  "C4",    # comprehensions
+  "D",     # docstrings
+  "DTZ",   # naive datetimes
+  "E",
+  "F",
+  "FLY",
+  "G",     # logging format
+  "I",     # import order
+  "ICN",
+  "INP",   # implicit namespace packages
+  "LOG",
+  "N",     # naming
+  "PERF",
+  "PGH",
+  "PIE",
+  "PL",    # pylint
+  "PT",    # pytest style
+  "PTH",
+  "RET",
+  "RSE",
+  "RUF",
+  "S",     # bandit
+  "SIM",
+  "SLF",
+  "T20",   # print
+  "TC",    # type-checking imports
+  "TRY",
+  "UP",
+  "W",
+]
+ignore = [
+  "D202",    # no blank line after function docstring (Home Assistant's style)
+  "D203",    # one blank line before class docstring: conflicts with D211
+  "D213",    # multi-line summary on the second line: conflicts with D212
+  "E501",    # line length: the formatter decides
+  "PLR0911", # too many returns: flows map many errors
+  "PLR0913", # too many arguments
+  "PLR2004", # magic values: HTTP statuses read better as numbers
+  "TRY003",  # long messages in exceptions
+  "TRY300",  # return in try: the flows read better that way
+  "TC001",   # type-checking-only imports: Home Assistant resolves annotations
+  "TC002",
+  "TC003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"custom_components/mqttcore/const.py" = ["S105"]  # names of fields, not secrets
+"tests/**" = [
+  "D",       # docstrings in tests are welcome, not required
+  "INP001",  # tests are not a package
+  "PLR0915", # long tests
+  "S101",    # assert
+  "S105",    # hard-coded test passwords
+  "S106",
+  "S108",    # temporary paths
+  "S603",    # subprocess: the integration test starts the host binary
+  "SLF001",  # private members in tests
+]
+
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+known-first-party = ["custom_components", "homeassistant"]
+combine-as-imports = true
+split-on-trailing-comma = false
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.format]
+skip-magic-trailing-comma = true
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+warn_unreachable = true
+show_error_codes = true
+enable_error_code = ["ignore-without-code", "redundant-self", "truthy-iterable"]
+packages = ["custom_components.mqttcore"]
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+# Let Home Assistant install its httpx alias before respx is imported.
+addopts = "-p no:respx --strict-markers"
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = [
+  "host_binary: starts the real mqttcore host binary (MQTTCORE_BIN)",
+]
+filterwarnings = [
+  "error::RuntimeWarning",
+]
+
+[tool.coverage.run]
+source = ["custom_components.mqttcore"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true

@@ -1,0 +1,8 @@
+# Test and lint tools, pinned to the Home Assistant 2026.11 line.
+# pytest-homeassistant is Home Assistant's own test package (it replaces
+# pytest-homeassistant-custom-component, which stopped at 2026.10.4) and
+# pins homeassistant==2026.11.2 itself.
+pytest-homeassistant==2026.11.2
+pytest-cov==7.1.0
+ruff==0.17.6
+mypy==2.4.1

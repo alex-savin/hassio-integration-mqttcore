@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Tools
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# A local mqttcore cluster for trying things out (data directories, secrets)
+.mqttcore-run/
+
+# Editors and systems
+.vscode/
+.idea/
+.DS_Store

@@ -1,0 +1,32 @@
+name: Validate
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  hassfest:
+    name: hassfest
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: home-assistant/actions/hassfest@master
+
+  marketplace:
+    # The HACS action: the checks the Marketplace catalog runs (the
+    # Marketplace is HACS inside Home Assistant since 2026.11).
+    name: Marketplace (HACS action)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: hacs/action@main
+        with:
+          category: integration
