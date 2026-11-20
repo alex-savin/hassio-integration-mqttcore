@@ -192,7 +192,7 @@ class MqttcoreConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
     async def _async_probe(self, url: str | None = None) -> str | None:
-        """Check that an mqttcore node answers, set up; the error code if not."""
+        """Check that an MQTT Core node answers, set up; the error code if not."""
         client = self._client(url)
         try:
             status = await client.get_auth_status()
@@ -305,7 +305,7 @@ class MqttcoreConfigFlow(ConfigFlow, domain=DOMAIN):
                 self._get_reauth_entry(),
                 data_updates={CONF_TOKEN: token, CONF_TOKEN_NAME: name},
             )
-        title = config.server_name or cluster.cluster or self._host or "mqttcore"
+        title = config.server_name or cluster.cluster or self._host or "MQTT Core"
         return self.async_create_entry(
             title=title,
             data={
@@ -422,7 +422,7 @@ class MqttcoreConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_hassio(
         self, discovery_info: HassioServiceInfo
     ) -> ConfigFlowResult:
-        """The mqttcore app announced itself to the Supervisor.
+        """The MQTT Core app announced itself to the Supervisor.
 
         STUB for phase 1: the app does not announce `mqttcore` discovery yet,
         and its payload is not settled. This expects `host`, `port`, `ssl`
@@ -442,7 +442,7 @@ class MqttcoreConfigFlow(ConfigFlow, domain=DOMAIN):
         except TypeError, ValueError:
             return self.async_abort(reason="invalid_discovery_info")
         self._set_connection(host, port, ssl, True)
-        self._app_name = str(config.get("addon") or discovery_info.name or "mqttcore")
+        self._app_name = str(config.get("addon") or discovery_info.name or "MQTT Core")
         self.context["title_placeholders"] = {"name": self._app_name}
         return await self.async_step_hassio_confirm()
 
@@ -457,7 +457,7 @@ class MqttcoreConfigFlow(ConfigFlow, domain=DOMAIN):
             errors["base"] = error
         return self.async_show_form(
             step_id="hassio_confirm",
-            description_placeholders={"addon": self._app_name or "mqttcore"},
+            description_placeholders={"addon": self._app_name or "MQTT Core"},
             errors=errors,
         )
 

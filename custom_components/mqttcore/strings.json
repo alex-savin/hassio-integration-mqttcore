@@ -1,19 +1,19 @@
 {
   "config": {
     "abort": {
-      "already_configured": "This mqttcore cluster is already set up.",
-      "invalid_discovery_info": "The mqttcore app's announcement did not say where it answers.",
+      "already_configured": "This MQTT Core cluster is already set up.",
+      "invalid_discovery_info": "The MQTT Core app's announcement did not say where it answers.",
       "reauth_successful": "A new API token is in place.",
       "wrong_cluster": "That node belongs to another cluster than the one this entry follows."
     },
     "error": {
       "cannot_connect": "Failed to connect.",
       "host_not_allowed": "The node does not answer to this name (HTTP 421). Use its IP address, its own DNS name, or the cluster's name.",
-      "https_required": "mqttcore refuses passwords and tokens over plain HTTP while its HTTPS works. Turn on HTTPS under Connection.",
+      "https_required": "MQTT Core refuses passwords and tokens over plain HTTP while its HTTPS works. Turn on HTTPS under Connection.",
       "invalid_auth": "Wrong OTA password.",
       "invalid_certificate": "The node's certificate could not be verified. Use the name on its certificate, or turn off certificate verification under Connection.",
       "invalid_network": "Enter up to four IP addresses or ranges (such as 192.0.2.10 or 192.0.2.0/24), separated by commas, or leave it empty.",
-      "not_mqttcore": "That address answers, but not as an mqttcore node.",
+      "not_mqttcore": "That address answers, but not as an MQTT Core node.",
       "setup_needed": "This node is not set up yet: set its OTA password in its console first.",
       "token_not_accepted": "The new API token was made, but the node did not accept it. Try again in a minute.",
       "token_refused": "The node refused to make the API token: {error}",
@@ -34,8 +34,8 @@
         "description": "{host} answers. Enter the cluster's OTA password to make an API token for Home Assistant: it reads the status and system areas, and nothing else."
       },
       "hassio_confirm": {
-        "description": "Set up the mqttcore cluster the {addon} app belongs to?",
-        "title": "mqttcore through the Home Assistant app"
+        "description": "Set up the MQTT Core cluster the {addon} app belongs to?",
+        "title": "MQTT Core through the Home Assistant app"
       },
       "reauth_confirm": {
         "data": {
@@ -58,7 +58,7 @@
           "host": "One node of the cluster: its DNS name (as on its certificate), the cluster's name, or an IP address. Home Assistant learns the other members from it.",
           "port": "The node's HTTPS port: 443 unless you moved it."
         },
-        "description": "Connect to an mqttcore node's admin API.",
+        "description": "Connect to an MQTT Core node's admin API.",
         "sections": {
           "connection": {
             "data": {
@@ -66,7 +66,7 @@
               "verify_ssl": "Verify the certificate"
             },
             "data_description": {
-              "ssl": "mqttcore accepts API tokens over plain HTTP only from the node itself (loopback).",
+              "ssl": "MQTT Core accepts API tokens over plain HTTP only from the node itself (loopback).",
               "verify_ssl": "Leave on for a certificate from Let's Encrypt. Turn off only for a self-signed certificate."
             },
             "name": "Connection"

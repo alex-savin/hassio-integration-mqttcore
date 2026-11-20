@@ -575,9 +575,9 @@ HASSIO = HassioServiceInfo(
         "port": 8443,
         "ssl": True,
         "server_name": "mqtt.example.com",
-        "addon": "mqttcore",
+        "addon": "MQTT Core",
     },
-    name="mqttcore",
+    name="MQTT Core",
     slug="local_mqttcore",
     uuid="1234",
 )
@@ -591,7 +591,7 @@ async def test_hassio(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker) 
     )
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "hassio_confirm"
-    assert result["description_placeholders"] == {"addon": "mqttcore"}
+    assert result["description_placeholders"] == {"addon": "MQTT Core"}
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     assert result["step_id"] == "credentials"
     result = await hass.config_entries.flow.async_configure(

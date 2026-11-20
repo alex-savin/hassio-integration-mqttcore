@@ -1,4 +1,4 @@
-"""Constants for the mqttcore integration."""
+"""Constants for the MQTT Core integration."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from typing import Final
 DOMAIN: Final = "mqttcore"
 LOGGER = logging.getLogger(__package__)
 
-MANUFACTURER: Final = "mqttcore"
+MANUFACTURER: Final = "MQTT Core"
 DEFAULT_PORT: Final = 443
 
 # Config entry data (the OTA password is never among them).

@@ -1,4 +1,4 @@
-"""The mqttcore integration: monitor an mqttcore broker cluster over its admin API."""
+"""The MQTT Core integration: monitor an MQTT Core broker cluster over its admin API."""
 
 from __future__ import annotations
 

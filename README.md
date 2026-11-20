@@ -1,7 +1,7 @@
-# mqttcore for Home Assistant
+# MQTT Core for Home Assistant
 
 A custom Home Assistant integration that monitors an
-[mqttcore](https://github.com/alex-savin/mqttcore) MQTT broker cluster over
+[MQTT Core](https://github.com/alex-savin/mqttcore) MQTT broker cluster over
 its HTTPS admin API: members and leader, clients, message rates, retained
 messages, failed logins, the shared certificate and its renewal, and each
 node's own counters, memory and links.
@@ -10,21 +10,21 @@ It reads the cluster over REST, not over MQTT, so it keeps working when
 Home Assistant's own MQTT connection is down, which is when you need it.
 
 - Home Assistant 2026.11 or later (Python 3.14).
-- mqttcore 0.29 or later (API version 1). Boards (ESP32-P4), the Linux
+- MQTT Core 0.29 or later (API version 1). Boards (ESP32-P4), the Linux
   node and the Home Assistant app are all supported.
 - Status: **phase 2 of the integration plan: monitoring only.** See
   [What comes next](#what-comes-next).
 
 ## Install
 
-The repository is private while mqttcore is. Once it is published, add it
+The repository is private while MQTT Core is. Once it is published, add it
 to the Marketplace (HACS, built into Home Assistant since 2026.11) as a
 custom repository:
 
 1. Settings → Marketplace → ⋮ → Custom repositories.
 2. Repository: `https://github.com/alex-savin/hassio-integration-mqttcore`,
    type **Integration**.
-3. Install **mqttcore**, then add it under Settings → Devices & services.
+3. Install **MQTT Core**, then add it under Settings → Devices & services.
 
 By hand: copy `custom_components/mqttcore` into your configuration
 directory's `custom_components/` and restart Home Assistant.
@@ -32,7 +32,7 @@ directory's `custom_components/` and restart Home Assistant.
 ## Set up
 
 Home Assistant finds boards by mDNS (`_mqttcore._tcp`) and offers them
-under Settings → Devices & services. Or add **mqttcore** and enter one
+under Settings → Devices & services. Or add **MQTT Core** and enter one
 node:
 
 1. **Host and port**: any member's DNS name, the cluster's name, or an IP
@@ -58,7 +58,7 @@ matches), Home Assistant asks for the OTA password again and mints a new
 token under the same name.
 
 Removing the integration does not revoke the token (only the OTA password
-can). Revoke it in the mqttcore console (API tokens) or with
+can). Revoke it in the MQTT Core console (API tokens) or with
 `POST /api/agents {"action": "revoke", "name": "home-assistant-…"}`.
 
 ## What you get
@@ -155,7 +155,7 @@ follow the firmware's JSON writers (`admin_cluster.c`, `admin_raft.c`,
 `admin_routes.c`, `broker/inspect.c`) and a real node's answers, with
 documentation names and addresses.
 
-`tests/test_host_binary.py` runs against the real broker: the mqttcore host
+`tests/test_host_binary.py` runs against the real broker: the MQTT Core host
 binary, started on loopback by the test. It is skipped unless
 `MQTTCORE_BIN` names the binary:
 
@@ -181,16 +181,16 @@ repository to have a description and topics.
 ## What comes next
 
 Phase 2 (this) is monitoring. From the integration plan
-(`docs/hassio-integration-plan.md` in the mqttcore repository):
+(`docs/hassio-integration-plan.md` in the MQTT Core repository):
 
-- **Phase 1 (mqttcore side):** the Home Assistant app announces itself to
+- **Phase 1 (MQTT Core side):** the Home Assistant app announces itself to
   the Supervisor. The `hassio` discovery step here is a **stub** until the
   app announces `mqttcore` discovery; it expects `host`, `port`, `ssl` and
   `server_name`.
 - **Phase 3:** an update entity per board (install, progress, release
   notes), restart and issue-certificate buttons, repairs for a rollback, a
   failing renewal, an expiring token or a member gone. Needs a token with
-  `system: write`, which mqttcore limits to 30 days today, unless the
+  `system: write`, which MQTT Core limits to 30 days today, unless the
   "maintenance" right is added.
 - **Phase 4:** actions for users, the ACL, client lists and kicking; a
   listeners options flow that asks for the OTA password each time; balancer
