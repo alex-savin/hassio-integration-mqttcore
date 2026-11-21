@@ -746,3 +746,110 @@ class TokenInfo:
             created=_positive_or_none(_opt_int(data, "created")),
             networks=_strings(data, "networks"),
         )
+
+
+# ---- GET /api/ota (a board; the host answers 501) ------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class OtaProgress:
+    """An install from the update server, as `GET /api/ota` reports it under `update`."""
+
+    state: str
+    version: str
+    message: str
+    bytes: int
+    total: int
+
+    @property
+    def running(self) -> bool:
+        """An install is under way (it ends in a restart, or `failed`)."""
+        return self.state in {"starting", "downloading", "checking", "restarting"}
+
+    @property
+    def percentage(self) -> int | None:
+        """How much of the image is written, 0 to 100; None before the size is known."""
+        if self.total <= 0:
+            return None
+        return max(0, min(100, self.bytes * 100 // self.total))
+
+    @classmethod
+    def from_dict(cls, data: Any) -> OtaProgress:
+        """Build from `update`."""
+        d = _obj(data)
+        return cls(
+            state=_str(d, "state", "idle"),
+            version=_str(d, "version"),
+            message=_str(d, "message"),
+            bytes=_int(d, "bytes"),
+            total=_int(d, "total"),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class OtaState:
+    """The board's firmware slots and image state (`GET /api/ota`)."""
+
+    version: str
+    image_state: str
+    confirmed: bool
+    running_partition: str
+    upload_running: bool
+    last_failure: str
+    update: OtaProgress
+    rolled_back_version: str | None
+    raw: dict[str, Any] = field(repr=False, compare=False)
+
+    @classmethod
+    def from_dict(cls, data: Any) -> OtaState:
+        """Build from the route's JSON."""
+        d = _obj(data)
+        rolled = d.get("rolled_back")
+        rolled_version = (
+            _opt_str(rolled, "version") if isinstance(rolled, dict) else None
+        )
+        return cls(
+            version=_str(d, "version"),
+            image_state=_str(d, "image_state"),
+            confirmed=_bool(d, "confirmed", True),
+            running_partition=_str(d, "running_partition"),
+            upload_running=_bool(d, "upload_running"),
+            last_failure=_str(d, "last_failure"),
+            update=OtaProgress.from_dict(d.get("update")),
+            rolled_back_version=rolled_version or None,
+            raw=d,
+        )
+
+
+# ---- POST /api/update/check (a board) ----------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class UpdateCheck:
+    """What the update server offers (`POST /api/update/check`)."""
+
+    current_version: str
+    latest_version: str | None
+    update_available: bool
+    verdict: str
+    why: str
+    published_at: str | None
+    release_notes_url: str | None
+    error: str | None
+    raw: dict[str, Any] = field(repr=False, compare=False)
+
+    @classmethod
+    def from_dict(cls, data: Any) -> UpdateCheck:
+        """Build from the route's JSON."""
+        d = _obj(data)
+        return cls(
+            current_version=_str(d, "current_version"),
+            latest_version=_opt_str(d, "latest_version") or None,
+            update_available=_bool(d, "update_available"),
+            verdict=_str(d, "verdict"),
+            why=_str(d, "why"),
+            published_at=_opt_str(d, "published_at") or None,
+            release_notes_url=_opt_str(d, "release_notes_url") or None,
+            error=_opt_str(d, "error"),
+            raw=d,
+        )

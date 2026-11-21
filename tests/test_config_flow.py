@@ -25,6 +25,7 @@ from custom_components.mqttcore.const import (
     DOMAIN,
     SECTION_CONNECTION,
     TOKEN_SCOPES,
+    TOKEN_SCOPES_LEGACY,
 )
 from homeassistant.config_entries import SOURCE_HASSIO, SOURCE_USER, SOURCE_ZEROCONF
 from homeassistant.const import (
@@ -39,7 +40,16 @@ from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers.service_info.hassio import HassioServiceInfo
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
-from .common import NEW_TOKEN, OTA_PASSWORD, TOKEN_NAME, URL01, load, prepend, view
+from .common import (
+    NEW_TOKEN,
+    NODES,
+    OTA_PASSWORD,
+    TOKEN_NAME,
+    URL01,
+    load,
+    prepend,
+    view,
+)
 
 pytestmark = pytest.mark.usefixtures(
     "mock_setup_entry", "mock_instance_id", "no_token_delay"
@@ -86,6 +96,13 @@ def mock_node(
     else:
         aioclient_mock.get(f"{url}/api/cluster", side_effect=cluster)
     aioclient_mock.get(f"{url}/api/device", json=load("device_mqtt01.json"))
+    # The other members, through the relay: the flow waits until they take
+    # the new token too.
+    for node_id, (short, _) in NODES.items():
+        if short != "mqtt01":
+            aioclient_mock.get(
+                f"{url}/api/peer?node={node_id}&path=/api/cluster", json=view(short)
+            )
     agents_list = load("agents.json")
     if tokens is not None:
         agents_list["tokens"].extend(tokens)
@@ -365,6 +382,67 @@ async def test_token_never_taken(
         result["flow_id"], {CONF_OTA_PASSWORD: OTA_PASSWORD}
     )
     assert result["errors"] == {"base": "token_not_accepted"}
+
+
+async def test_waits_for_the_members(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """A member that lacks the new token for a moment is asked again."""
+    node04 = next(n for n, (short, _) in NODES.items() if short == "mqtt04")
+    calls = 0
+
+    async def relayed(method: str, url: URL, data: Any) -> AiohttpClientMockResponse:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return AiohttpClientMockResponse(
+                method,
+                url,
+                status=403,
+                json={"error": "this node does not hold that API token"},
+            )
+        return AiohttpClientMockResponse(method, url, json=view("mqtt04"))
+
+    aioclient_mock.get(
+        f"{URL01}/api/peer?node={node04}&path=/api/cluster", side_effect=relayed
+    )
+    mock_node(aioclient_mock)
+    result = await _start_user(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_OTA_PASSWORD: OTA_PASSWORD}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert calls == 2
+
+
+async def test_cluster_before_maintenance(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """A cluster before 0.30.0 refuses the maintenance area: the legacy scopes then."""
+
+    async def agents(
+        method: str, url: URL, body: dict[str, Any]
+    ) -> AiohttpClientMockResponse:
+        if body["action"] == "create" and "maintenance" in body["scopes"]:
+            return AiohttpClientMockResponse(
+                method, url, status=400, json={"error": 'unknown area "maintenance"'}
+            )
+        answer = {"status": "ok"}
+        if body["action"] == "create":
+            answer["token"] = NEW_TOKEN
+        return AiohttpClientMockResponse(method, url, json=answer)
+
+    posted = mock_node(aioclient_mock, agents_post=agents)
+    result = await _start_user(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_OTA_PASSWORD: OTA_PASSWORD}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    creates = [b for b in posted if b["action"] == "create"]
+    assert [sorted(b["scopes"]) for b in creates] == [
+        sorted(TOKEN_SCOPES),
+        sorted(TOKEN_SCOPES_LEGACY),
+    ]
 
 
 async def test_token_scope_refused(

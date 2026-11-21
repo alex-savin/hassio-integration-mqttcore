@@ -1,0 +1,18 @@
+{
+  "running_partition": "ota_1",
+  "next_partition": "ota_0",
+  "image_state": "valid",
+  "confirmed": true,
+  "confirm_waiting_for": null,
+  "version": "0.30.0",
+  "build": "p4-v0.30.0",
+  "build_date": "Nov 21 2026 12:00:00",
+  "signing": {"required": true, "keys": ["0123456789abcdef"]},
+  "upload_running": false,
+  "last_failure": "",
+  "last_failure_at_bytes": 0,
+  "failures_since_boot": 0,
+  "last_failure_seconds_ago": -1,
+  "update": {"state": "idle", "version": "", "message": "", "bytes": 0, "total": 0, "seconds": 0},
+  "rolled_back": null
+}

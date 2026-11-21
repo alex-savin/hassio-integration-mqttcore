@@ -244,16 +244,18 @@ async def test_one_node(hass: HomeAssistant, cluster: Cluster) -> None:
     assert entry.unique_id == "cluster:itest"
     assert entry.title == "itest"
 
-    # The token is in the node, limited to loopback, read-only.
+    # The token is in the node, limited to loopback: it reads, maintains
+    # (no expiry: mqttcore 0.30.0), and changes users, the ACL and clients.
     status, agents = node.get("/api/agents", **{"X-OTA-Password": OTA_PASSWORD})
     assert status == 200
     (token,) = agents["tokens"]
     assert token["name"].startswith("home-assistant-")
     assert token["scopes"] == {
         "status": "read",
-        "clients": "none",
-        "access": "none",
+        "clients": "write",
+        "access": "write",
         "system": "read",
+        "maintenance": "write",
     }
     assert token["networks"] == ["127.0.0.1/32"]
     assert token["expires_at"] == 0

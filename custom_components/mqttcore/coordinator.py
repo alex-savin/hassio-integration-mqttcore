@@ -20,7 +20,7 @@ it has been gone for a while.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 import time
 from typing import TYPE_CHECKING, Any
@@ -50,7 +50,7 @@ from .const import (
     NODE_REMOVE_AFTER,
     NODE_SCAN_INTERVAL,
 )
-from .devices import node_device_details, node_identifier
+from .devices import node_device_details, node_identifier, node_is_board
 from .pymqttcore import (
     AcmeStatus,
     ClusterMember,
@@ -58,6 +58,7 @@ from .pymqttcore import (
     Device,
     MqttcoreAuthenticationError,
     MqttcoreClient,
+    MqttcoreConnectionError,
     MqttcoreError,
     MqttcoreForbiddenError,
     MqttcoreNotSupportedError,
@@ -275,6 +276,14 @@ class MqttcoreClusterCoordinator(DataUpdateCoordinator[ClusterData]):
             translation_placeholders={"error": str(last_error)},
         )
 
+    async def async_issue_certificate(self) -> None:
+        """Order a certificate now, from the board that orders them (the leader)."""
+        client = self.active_client
+        data = self.data
+        if client is None or data is None:
+            raise MqttcoreConnectionError("the cluster does not answer")
+        await client.issue_certificate(node_id=_certificate_source(data.cluster))
+
     async def _async_refresh_certificate(
         self, client: MqttcoreClient, cluster: ClusterStatus
     ) -> None:
@@ -380,6 +389,30 @@ class MqttcoreNodeCoordinator(DataUpdateCoordinator[NodeData]):
             else:
                 routes.append(via_relay)
         return routes
+
+    @property
+    def is_board(self) -> bool:
+        """The node is a board: it updates and restarts itself."""
+        device = self.data.device if self.data is not None else None
+        return node_is_board(device, self.member)
+
+    async def async_call[T](
+        self, call: Callable[[MqttcoreClient, str | None], Awaitable[T]]
+    ) -> T:
+        """Make one call on the node, by its first route that is reachable.
+
+        `call(client, relay_node)` gets the client and, through a relay, the
+        node's ID for `node_id=`. Only an unreachable route moves on to the
+        next; any answer, an error one included, is the node's.
+        """
+        last_error: MqttcoreConnectionError | None = None
+        for client, relay_node, _direct_url in self._routes():
+            try:
+                return await call(client, relay_node)
+            except MqttcoreConnectionError as err:
+                LOGGER.debug("Node %s via %s: %s", self.node_id, client.url, err)
+                last_error = err
+        raise MqttcoreConnectionError(str(last_error or "no route to the node"))
 
     async def _async_update_data(self) -> NodeData:
         """Read the node's counters, its view of the cluster and its device."""

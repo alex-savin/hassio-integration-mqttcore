@@ -21,11 +21,26 @@ CONF_OTA_PASSWORD: Final = "ota_password"
 CONF_RESTRICT_NETWORK: Final = "restrict_network"
 SECTION_CONNECTION: Final = "connection"
 
-# The token the flow mints: read-only, status and system (the certificate
-# and the ACME state live in the system area). Phase 3 (updates, restart)
-# needs system write, which mqttcore caps at 30 days today.
+# The token the flow mints. Monitoring reads status and system (the
+# certificate and the ACME state live there); updates, restarts and renewals
+# are maintenance (mqttcore 0.30.0), whose write needs no expiry; the actions
+# change users and the ACL (access) and disconnect clients (clients). A
+# cluster before 0.30.0 does not know maintenance: the flow then mints the
+# legacy scopes, and a repair asks to sign in again after its update.
 TOKEN_NAME_PREFIX: Final = "home-assistant"
-TOKEN_SCOPES: Final[dict[str, str]] = {"status": "read", "system": "read"}
+TOKEN_SCOPES: Final[dict[str, str]] = {
+    "status": "read",
+    "clients": "write",
+    "access": "write",
+    "system": "read",
+    "maintenance": "write",
+}
+TOKEN_SCOPES_LEGACY: Final[dict[str, str]] = {
+    "status": "read",
+    "clients": "write",
+    "access": "write",
+    "system": "read",
+}
 TOKEN_NETWORKS_MAX: Final = 4
 
 # A token minted through a follower reaches that follower with the shared
@@ -34,6 +49,11 @@ TOKEN_VERIFY_ATTEMPTS: Final = 15
 TOKEN_VERIFY_DELAY: Final = 1.0
 
 CLUSTER_SCAN_INTERVAL: Final = timedelta(seconds=30)
+# A board's firmware: its state each minute, every 5 s while it installs;
+# the update server asked every 6 hours (each check fetches its manifest).
+UPDATE_SCAN_INTERVAL: Final = timedelta(minutes=1)
+UPDATE_PROGRESS_INTERVAL: Final = timedelta(seconds=5)
+UPDATE_CHECK_INTERVAL: Final = timedelta(hours=6)
 NODE_SCAN_INTERVAL: Final = timedelta(seconds=30)
 DEVICE_REFRESH_INTERVAL: Final = timedelta(minutes=10)
 CERTIFICATE_REFRESH_INTERVAL: Final = timedelta(minutes=10)

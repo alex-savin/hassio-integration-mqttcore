@@ -48,6 +48,21 @@ TOKEN_NAME = "home-assistant-0123abcd"
 OTA_PASSWORD = "correct horse battery"
 UNIQUE_ID = "mqtt.example.com"
 
+# What GET /api/agents/self says of the token the entry holds.
+TOKEN_SELF: dict[str, Any] = {
+    "name": "home-assistant-0123abcd",
+    "scopes": {
+        "status": "read",
+        "clients": "write",
+        "access": "write",
+        "system": "read",
+        "maintenance": "write",
+    },
+    "expires_at": 0,
+    "created": 1795000000,
+    "networks": [],
+}
+
 ENTRY_DATA: dict[str, Any] = {
     CONF_HOST: "mqtt01.example.com",
     CONF_PORT: 443,
@@ -115,6 +130,24 @@ def node_routes(short: str) -> dict[str, tuple[int, Any]]:
                 },
             )
         ),
+        "/api/agents/self": (200, TOKEN_SELF),
+        "/api/ota": (
+            (200, load("ota_mqtt01.json"))
+            if board
+            else (501, {"error": "firmware updates exist on the board only"})
+        ),
+    }
+
+
+def node_post_routes(short: str) -> dict[str, tuple[int, Any]]:
+    """What one node answers to a POST, by path."""
+    board = short == "mqtt01"
+    return {
+        "/api/update/check": (
+            (200, load("update_check_mqtt01.json"))
+            if board
+            else (501, {"error": "firmware updates exist on the board only"})
+        )
     }
 
 
@@ -132,24 +165,28 @@ def mock_cluster(
     down = set(down)
     overrides = overrides or {}
     for node_id, (short, url) in NODES.items():
-        routes = node_routes(short)
-        for path, answer in routes.items():
-            status, body = overrides.get((url, path), answer)
-            if url in down:
-                aioclient_mock.get(f"{url}{path}", exc=ClientConnectionError("down"))
-            else:
-                aioclient_mock.get(f"{url}{path}", status=status, json=body)
-            # The same answer through every other node's relay.
-            for other_id, (_, other_url) in NODES.items():
-                if other_id == node_id:
-                    continue
-                relay = f"{other_url}/api/peer?node={node_id}&path={path}"
-                if other_url in down:
-                    aioclient_mock.get(relay, exc=ClientConnectionError("down"))
-                elif url in down:
-                    aioclient_mock.get(relay, status=502, json={"error": "not linked"})
+        for method, routes in (
+            ("get", node_routes(short)),
+            ("post", node_post_routes(short)),
+        ):
+            register = getattr(aioclient_mock, method)
+            for path, answer in routes.items():
+                status, body = overrides.get((url, path), answer)
+                if url in down:
+                    register(f"{url}{path}", exc=ClientConnectionError("down"))
                 else:
-                    aioclient_mock.get(relay, status=status, json=body)
+                    register(f"{url}{path}", status=status, json=body)
+                # The same answer through every other node's relay.
+                for other_id, (_, other_url) in NODES.items():
+                    if other_id == node_id:
+                        continue
+                    relay = f"{other_url}/api/peer?node={node_id}&path={path}"
+                    if other_url in down:
+                        register(relay, exc=ClientConnectionError("down"))
+                    elif url in down:
+                        register(relay, status=502, json={"error": "not linked"})
+                    else:
+                        register(relay, status=status, json=body)
 
 
 def get_device(

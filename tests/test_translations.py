@@ -57,12 +57,13 @@ def test_entity_names() -> None:
 def test_flow_errors_have_text() -> None:
     """Every error and abort code the flow uses has its sentence."""
     source = (INTEGRATION / "config_flow.py").read_text()
-    config = _load("strings.json")["config"]
+    strings = _load("strings.json")
+    config, options = strings["config"], strings["options"]
     codes = set(re.findall(r'return "([a-z_]+)"', source))
     codes |= set(re.findall(r'FlowError\("([a-z_]+)"', source))
     codes |= set(re.findall(r'errors\[[^]]+\] = "([a-z_]+)"', source))
     assert codes, "the patterns found nothing"
     for code in codes - {"mqttcore"}:
-        assert code in config["error"], code
+        assert code in config["error"] or code in options["error"], code
     for reason in re.findall(r'reason="([a-z_]+)"', source):
-        assert reason in config["abort"], reason
+        assert reason in config["abort"] or reason in options["abort"], reason

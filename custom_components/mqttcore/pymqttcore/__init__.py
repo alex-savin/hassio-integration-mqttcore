@@ -39,12 +39,15 @@ from .models import (
     DrainStatus,
     LeaderInfo,
     MemberCertificate,
+    OtaProgress,
+    OtaState,
     RaftMember,
     RaftStatus,
     ServerConfig,
     Stats,
     TlsStatus,
     TokenInfo,
+    UpdateCheck,
 )
 
 __all__ = [
@@ -77,11 +80,14 @@ __all__ = [
     "MqttcoreResponseError",
     "MqttcoreTlsError",
     "MqttcoreUnavailableError",
+    "OtaProgress",
+    "OtaState",
     "RaftMember",
     "RaftStatus",
     "ServerConfig",
     "Stats",
     "TlsStatus",
     "TokenInfo",
+    "UpdateCheck",
     "build_url",
 ]

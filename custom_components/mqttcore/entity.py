@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING, override
 
+from homeassistant.core import callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -125,3 +127,36 @@ class MqttcoreNodeEntity(CoordinatorEntity[MqttcoreNodeCoordinator]):
         super().__init__(node)
         self._attr_unique_id = node_unique_id(node.config_entry, node.node_id, key)
         self._attr_device_info = _node_device(node)
+
+
+@callback
+def async_track_boards(
+    entry: MqttcoreConfigEntry, add: Callable[[list[MqttcoreNodeCoordinator]], None]
+) -> None:
+    """Call `add` with each board's node once: now, and as boards appear.
+
+    A node is known for a board once its `GET /api/device` was read, so new
+    ones are looked for after every node refresh; a removed node's device
+    takes its entities with it, and it is looked for again if it returns.
+    """
+    runtime = entry.runtime_data
+    seen: set[str] = set()
+
+    @callback
+    def _scan() -> None:
+        new = [
+            node
+            for node in runtime.nodes.nodes.values()
+            if node.node_id not in seen and node.is_board
+        ]
+        if new:
+            seen.update(node.node_id for node in new)
+            add(new)
+
+    @callback
+    def _removed(node_id: str) -> None:
+        seen.discard(node_id)
+
+    _scan()
+    entry.async_on_unload(runtime.nodes.async_add_update_listener(_scan))
+    entry.async_on_unload(runtime.nodes.async_add_remove_listener(_removed))

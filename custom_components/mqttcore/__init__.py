@@ -14,8 +14,15 @@ from homeassistant.helpers.typing import ConfigType
 from .const import DOMAIN
 from .coordinator import MqttcoreClusterCoordinator, MqttcoreNodeManager
 from .devices import cluster_device_kwargs, cluster_identifier, node_identifier
+from .repairs import async_check_token
+from .services import async_setup_services
 
-PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.SENSOR]
+PLATFORMS: list[Platform] = [
+    Platform.BINARY_SENSOR,
+    Platform.BUTTON,
+    Platform.SENSOR,
+    Platform.UPDATE,
+]
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
@@ -33,7 +40,8 @@ type MqttcoreConfigEntry = ConfigEntry[MqttcoreRuntimeData]
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up the integration (config entries only)."""
+    """Set up the integration (config entries only) and its actions."""
+    async_setup_services(hass)
     return True
 
 
@@ -57,6 +65,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: MqttcoreConfigEntry) -> 
     entry.async_on_unload(nodes.async_shutdown)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    # A token minted before 0.30.0 (or by integration 0.1) lacks rights the
+    # entities and actions use: a repair offers a new one.
+    entry.async_create_background_task(
+        hass, async_check_token(hass, entry), f"{DOMAIN} token check"
+    )
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: MqttcoreConfigEntry) -> None:

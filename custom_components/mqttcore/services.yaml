@@ -1,0 +1,80 @@
+add_user:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: mqttcore
+    name:
+      required: true
+      selector:
+        text:
+    password:
+      required: true
+      selector:
+        text:
+          type: password
+set_password:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: mqttcore
+    name:
+      required: true
+      selector:
+        text:
+    password:
+      required: true
+      selector:
+        text:
+          type: password
+remove_user:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: mqttcore
+    name:
+      required: true
+      selector:
+        text:
+get_acl:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: mqttcore
+set_acl:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: mqttcore
+    acl:
+      required: true
+      selector:
+        text:
+          multiline: true
+list_clients:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: mqttcore
+kick_client:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: mqttcore
+    client_id:
+      required: true
+      selector:
+        text:

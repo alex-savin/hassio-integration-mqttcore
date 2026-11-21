@@ -1,0 +1,17 @@
+{
+  "current_version": "0.30.0",
+  "server": "https://ota.example.com",
+  "update_available": true,
+  "manifest": "p4/latest-rev3.json",
+  "latest_version": "0.30.1",
+  "published_at": "2026-11-22T12:00:00Z",
+  "commit": "develop",
+  "size": 1773568,
+  "sha256": "97d85087fd37b5167ab7e6d02d74ac2403571daf136333a93becd848f9f76d64",
+  "verdict": "install",
+  "why": "0.30.1 is newer than 0.30.0",
+  "image_url": "https://ota.example.com/p4/0.30.1/mqttcore-p4-rev3.bin",
+  "release_notes_url": "https://ota.example.com/p4/0.30.1/notes.md",
+  "signature_required": true,
+  "install_async": true
+}

@@ -105,6 +105,39 @@
       "version": {
         "default": "mdi:tag"
       }
+    },
+    "update": {
+      "firmware": {
+        "default": "mdi:chip"
+      }
+    },
+    "button": {
+      "renew_certificate": {
+        "default": "mdi:certificate"
+      }
+    }
+  },
+  "services": {
+    "add_user": {
+      "service": "mdi:account-plus"
+    },
+    "set_password": {
+      "service": "mdi:account-key"
+    },
+    "remove_user": {
+      "service": "mdi:account-remove"
+    },
+    "get_acl": {
+      "service": "mdi:shield-search"
+    },
+    "set_acl": {
+      "service": "mdi:shield-edit"
+    },
+    "list_clients": {
+      "service": "mdi:lan-connect"
+    },
+    "kick_client": {
+      "service": "mdi:lan-disconnect"
     }
   }
 }

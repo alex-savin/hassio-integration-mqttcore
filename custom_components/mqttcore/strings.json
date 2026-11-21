@@ -190,6 +190,16 @@
       "version": {
         "name": "Version"
       }
+    },
+    "update": {
+      "firmware": {
+        "name": "Firmware"
+      }
+    },
+    "button": {
+      "renew_certificate": {
+        "name": "Renew certificate"
+      }
     }
   },
   "exceptions": {
@@ -204,6 +214,211 @@
     },
     "token_rejected": {
       "message": "The node no longer accepts the API token: it was revoked or has expired."
+    },
+    "token_cannot_read_firmware": {
+      "message": "The token may not read the firmware's state ({error}). Sign in again to give it the maintenance right (MQTT Core 0.30.0)."
+    },
+    "token_cannot_maintain": {
+      "message": "The token may not do this ({error}). Sign in again to give it the maintenance right (MQTT Core 0.30.0)."
+    },
+    "update_not_offered": {
+      "message": "The update server does not offer version {version} to this board: it installs only what its own update server offers."
+    },
+    "install_failed": {
+      "message": "The board did not start the install: {error}"
+    },
+    "maintenance_failed": {
+      "message": "The node refused or did not answer: {error}"
+    },
+    "entry_not_found": {
+      "message": "No MQTT Core cluster with that config entry."
+    },
+    "entry_not_loaded": {
+      "message": "The MQTT Core cluster {title} is not loaded."
+    },
+    "token_cannot_change": {
+      "message": "The token may not change this ({error}). Sign in again to give it the access and clients rights."
+    },
+    "refused": {
+      "message": "MQTT Core refused it: {error}"
+    },
+    "action_failed": {
+      "message": "The action failed: {error}"
+    },
+    "client_not_connected": {
+      "message": "No node has a client connected as {client_id}."
+    }
+  },
+  "issues": {
+    "update_rolled_back": {
+      "title": "{node} rolled back an update",
+      "description": "The board {node} did not confirm version {version} after installing it, and went back to {running}. It keeps running {running}; its log (MQTT Core's console, System → Logs) says why the new version did not start. This goes away once a later update succeeds."
+    },
+    "token_rights": {
+      "title": "MQTT Core {title} needs a new token",
+      "description": "The token Home Assistant uses lacks rights for: {areas}. Fix it to sign in again.",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Sign in again to MQTT Core {title}",
+            "description": "The token Home Assistant uses has less than the integration needs for: {areas}. Sign in again with the OTA password: Home Assistant makes a new token with those rights and keeps no password."
+          }
+        }
+      }
+    }
+  },
+  "services": {
+    "add_user": {
+      "name": "Add user",
+      "description": "Adds an MQTT user to the cluster. It may connect at once on every node.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Cluster",
+          "description": "The MQTT Core cluster."
+        },
+        "name": {
+          "name": "User name",
+          "description": "1 to 64 bytes: no ':', spaces or control characters, not '#' first."
+        },
+        "password": {
+          "name": "Password",
+          "description": "8 to 128 characters."
+        }
+      }
+    },
+    "set_password": {
+      "name": "Set password",
+      "description": "Gives an MQTT user a new password. Clients connected as that user are disconnected.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Cluster",
+          "description": "The MQTT Core cluster."
+        },
+        "name": {
+          "name": "User name",
+          "description": "The user."
+        },
+        "password": {
+          "name": "Password",
+          "description": "8 to 128 characters."
+        }
+      }
+    },
+    "remove_user": {
+      "name": "Remove user",
+      "description": "Removes an MQTT user. Clients connected as that user are disconnected.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Cluster",
+          "description": "The MQTT Core cluster."
+        },
+        "name": {
+          "name": "User name",
+          "description": "The user."
+        }
+      }
+    },
+    "get_acl": {
+      "name": "Get ACL",
+      "description": "Returns the ACL in force: its text, its mode and how many rules it has.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Cluster",
+          "description": "The MQTT Core cluster."
+        }
+      }
+    },
+    "set_acl": {
+      "name": "Set ACL",
+      "description": "Replaces the whole ACL with this text. Subscriptions it no longer allows are dropped.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Cluster",
+          "description": "The MQTT Core cluster."
+        },
+        "acl": {
+          "name": "ACL",
+          "description": "One rule per line: allow|deny WHO ACTIONS FILTER; # starts a comment."
+        }
+      }
+    },
+    "list_clients": {
+      "name": "List clients",
+      "description": "Returns the clients connected to every node, with their login, address and node.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Cluster",
+          "description": "The MQTT Core cluster."
+        }
+      }
+    },
+    "kick_client": {
+      "name": "Disconnect client",
+      "description": "Disconnects a client from whichever node it is connected to (MQTT 5: reason 0x98). Its session stays.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Cluster",
+          "description": "The MQTT Core cluster."
+        },
+        "client_id": {
+          "name": "Client ID",
+          "description": "The client identifier."
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "The cluster's listeners",
+        "description": "Listener settings are the cluster's, shared by every node that follows them, and used from each node's next start. Changing them needs the OTA password, which Home Assistant does not keep.",
+        "data": {
+          "ota_password": "OTA password"
+        }
+      },
+      "listeners": {
+        "title": "The cluster's listeners",
+        "description": "Each server on or off, and its port. No two servers that are on may share a port. {error}",
+        "data": {
+          "mqtt_enabled": "MQTT: on",
+          "mqtt_port": "MQTT: port",
+          "mqtts_enabled": "MQTT over TLS: on",
+          "mqtts_port": "MQTT over TLS: port",
+          "ws_enabled": "WebSocket: on",
+          "ws_port": "WebSocket: port",
+          "wss_enabled": "Secure WebSocket: on",
+          "wss_port": "Secure WebSocket: port",
+          "http_enabled": "Console (HTTP): on",
+          "http_port": "Console (HTTP): port",
+          "https_enabled": "Console (HTTPS): on",
+          "https_port": "Console (HTTPS): port",
+          "ws_path": "WebSocket path"
+        },
+        "data_description": {
+          "http_enabled": "Plain HTTP may be off only while HTTPS serves with a certificate; its port stays reserved for the fallback.",
+          "ws_path": "The path both WebSocket listeners answer on, such as /mqtt."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect.",
+      "host_not_allowed": "The node does not answer to this name (HTTP 421). Use its IP address, its own DNS name, or the cluster's name.",
+      "https_required": "MQTT Core refuses passwords and tokens over plain HTTP while its HTTPS works. Turn on HTTPS under Connection.",
+      "invalid_auth": "Wrong OTA password.",
+      "invalid_certificate": "The node's certificate could not be verified. Use the name on its certificate, or turn off certificate verification under Connection.",
+      "invalid_network": "Enter up to four IP addresses or ranges (such as 192.0.2.10 or 192.0.2.0/24), separated by commas, or leave it empty.",
+      "not_mqttcore": "That address answers, but not as an MQTT Core node.",
+      "setup_needed": "This node is not set up yet: set its OTA password in its console first.",
+      "token_not_accepted": "The new API token was made, but the node did not accept it. Try again in a minute.",
+      "token_refused": "The node refused to make the API token: {error}",
+      "too_many_attempts": "Too many wrong passwords from this address. Wait a few minutes and try again.",
+      "unknown": "Unexpected error.",
+      "no_listeners": "This node does not report listener settings.",
+      "listeners_refused": "MQTT Core refused the change: {error}"
+    },
+    "abort": {
+      "listeners_unchanged": "Nothing changed.",
+      "listeners_saved": "Saved for the cluster. Each node uses them from its next start. {message}"
     }
   }
 }

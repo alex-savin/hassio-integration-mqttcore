@@ -10,10 +10,13 @@ It reads the cluster over REST, not over MQTT, so it keeps working when
 Home Assistant's own MQTT connection is down, which is when you need it.
 
 - Home Assistant 2026.11 or later (Python 3.14).
-- MQTT Core 0.29 or later (API version 1). Boards (ESP32-P4), the Linux
-  node and the Home Assistant app are all supported.
-- Status: **phase 2 of the integration plan: monitoring only.** See
-  [What comes next](#what-comes-next).
+- MQTT Core 0.29 or later (API version 1); 0.30.0 or later for board
+  updates, restarts and certificate renewal (the token's `maintenance`
+  right). Boards (ESP32-P4), the Linux node and the Home Assistant app are
+  all supported.
+- Status: **phases 2 to 4 of the integration plan:** monitoring, board
+  updates and maintenance, and control of users, the ACL, clients and the
+  listeners. See [What comes next](#what-comes-next).
 
 ## Install
 
@@ -130,6 +133,37 @@ as hardware version) or "Linux node"; software version and MAC from
 Rates restart (unknown for one reading) when a node restarts and its
 counters start again from zero.
 
+### Maintenance (0.2.0, MQTT Core 0.30.0)
+
+- **Firmware** (an update entity per board): the version the board runs and
+  the release its update server offers, with the release notes. Install
+  asks the board to fetch that release itself, check its signature and
+  restart into it; the entity shows the progress. Only the offered release
+  can be installed. Linux nodes have none: the Home Assistant app is
+  updated by the Supervisor, a container by its image.
+- **Restart** (a button per board) and **Renew certificate** (on the
+  cluster device: the board that orders certificates orders one now).
+- **Repairs:** a board that rolled an update back (it did not confirm the
+  new version), and a token with less than the integration needs (made by
+  0.1, or on a cluster before 0.30.0): fixing it signs in again, which
+  makes a new token.
+
+### Actions (0.2.0)
+
+Each names the cluster's config entry. `mqttcore.add_user`,
+`mqttcore.set_password` and `mqttcore.remove_user` change the cluster's
+users; `mqttcore.get_acl` returns the ACL in force and `mqttcore.set_acl`
+replaces it; `mqttcore.list_clients` returns every node's clients and
+`mqttcore.kick_client` disconnects one from whichever node has it. A
+refusal comes back in MQTT Core's own words.
+
+### Listeners (options)
+
+**Configure** on the integration asks for the OTA password, then shows each
+server on or off and its port. The change is the cluster's (shared
+settings), used by each node from its next start. The password is used for
+that one change and kept nowhere: no token reaches these settings.
+
 ### Diagnostics
 
 Download diagnostics from the integration's page. Tokens, the token's
@@ -180,21 +214,14 @@ repository to have a description and topics.
 
 ## What comes next
 
-Phase 2 (this) is monitoring. From the integration plan
+Phases 2 to 4 are here; phase 1 is MQTT Core's own (its Home Assistant
+app announces `mqttcore` discovery with `host`, `port`, `ssl` and
+`server_name`, which the `hassio` step takes). From the integration plan
 (`docs/hassio-integration-plan.md` in the MQTT Core repository):
 
-- **Phase 1 (MQTT Core side):** the Home Assistant app announces itself to
-  the Supervisor. The `hassio` discovery step here is a **stub** until the
-  app announces `mqttcore` discovery; it expects `host`, `port`, `ssl` and
-  `server_name`.
-- **Phase 3:** an update entity per board (install, progress, release
-  notes), restart and issue-certificate buttons, repairs for a rollback, a
-  failing renewal, an expiring token or a member gone. Needs a token with
-  `system: write`, which MQTT Core limits to 30 days today, unless the
-  "maintenance" right is added.
-- **Phase 4:** actions for users, the ACL, client lists and kicking; a
-  listeners options flow that asks for the OTA password each time; balancer
-  and drain.
+- **Still open from phase 3:** repairs for a failing renewal and a member
+  gone (the binary sensors show both today).
+- **Still open from phase 4:** the balancer and drain.
 - **Phase 5:** a public repository and a listing in the Marketplace catalog.
 
 ## License

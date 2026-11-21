@@ -14,12 +14,18 @@ import asyncio
 from collections.abc import Mapping
 import ipaddress
 import socket
-from typing import Any, override
+from typing import Any, Final, override
 
 import probatio
 
 from homeassistant.components import network
-from homeassistant.config_entries import SOURCE_REAUTH, ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import (
+    SOURCE_REAUTH,
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+)
 from homeassistant.const import (
     CONF_HOST,
     CONF_PORT,
@@ -27,6 +33,7 @@ from homeassistant.const import (
     CONF_TOKEN,
     CONF_VERIFY_SSL,
 )
+from homeassistant.core import callback
 from homeassistant.data_entry_flow import AbortFlow, section
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv, instance_id
@@ -52,6 +59,7 @@ from .const import (
     TOKEN_NAME_PREFIX,
     TOKEN_NETWORKS_MAX,
     TOKEN_SCOPES,
+    TOKEN_SCOPES_LEGACY,
     TOKEN_VERIFY_ATTEMPTS,
     TOKEN_VERIFY_DELAY,
 )
@@ -158,6 +166,13 @@ class MqttcoreConfigFlow(ConfigFlow, domain=DOMAIN):
     """Set up a cluster from one of its nodes."""
 
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> MqttcoreOptionsFlow:
+        """The cluster's listeners, changed with the OTA password each time."""
+        return MqttcoreOptionsFlow()
+
     MINOR_VERSION = 1
 
     def __init__(self) -> None:
@@ -243,11 +258,17 @@ class MqttcoreConfigFlow(ConfigFlow, domain=DOMAIN):
         return f"{TOKEN_NAME_PREFIX}-{iid.replace('-', '')[:8]}"
 
     async def _async_token_works(self, token: str) -> bool:
-        """Use the new token once; a follower learns it about a second later."""
+        """Use the new token once; a follower learns it about a second later.
+
+        Then give the other live members the same while: they judge a
+        relayed request by their own copy of the token, which comes with the
+        shared settings. One that still lacks it then is no failure: its
+        coordinator reads it again at its next refresh.
+        """
         client = self._client(token=token)
         for attempt in range(TOKEN_VERIFY_ATTEMPTS):
             try:
-                await client.get_cluster()
+                cluster = await client.get_cluster()
             except (MqttcoreAuthenticationError, MqttcoreConnectionError) as err:
                 LOGGER.debug(
                     "The new token is not taken yet (%s): %s", attempt + 1, err
@@ -257,8 +278,36 @@ class MqttcoreConfigFlow(ConfigFlow, domain=DOMAIN):
             except MqttcoreError as err:
                 LOGGER.debug("The new token was refused: %s", err)
                 return False
+            await self._async_token_spread(client, cluster)
             return True
         return False
+
+    async def _async_token_spread(
+        self, client: MqttcoreClient, cluster: ClusterStatus
+    ) -> None:
+        """Wait, a few seconds at most, until every live member takes the token."""
+        if not cluster.enabled:
+            return
+        waiting = [
+            m.node_id
+            for m in cluster.members
+            if m.alive and not m.is_self and m.node_id
+        ]
+        for attempt in range(TOKEN_VERIFY_ATTEMPTS):
+            if not waiting:
+                return
+            still: list[str] = []
+            for node_id in waiting:
+                try:
+                    await client.get_cluster(node_id=node_id)
+                except MqttcoreAuthenticationError, MqttcoreForbiddenError:
+                    still.append(node_id)  # its copy of the token is not there yet
+                except MqttcoreError as err:
+                    LOGGER.debug("Member %s did not answer: %s", node_id, err)
+            waiting = still
+            if waiting:
+                LOGGER.debug("Token not on %s yet (%s)", waiting, attempt + 1)
+                await asyncio.sleep(TOKEN_VERIFY_DELAY)
 
     async def _async_mint(self, password: str, networks: list[str]) -> ConfigFlowResult:
         """Identify the cluster with the OTA password, mint the token, finish."""
@@ -288,9 +337,25 @@ class MqttcoreConfigFlow(ConfigFlow, domain=DOMAIN):
             existing = await client.list_tokens(ota_password=password)
             if any(token.name == name for token in existing):
                 await client.revoke_token(ota_password=password, name=name)
-            token = await client.create_token(
-                ota_password=password, name=name, scopes=TOKEN_SCOPES, networks=networks
-            )
+            try:
+                token = await client.create_token(
+                    ota_password=password,
+                    name=name,
+                    scopes=TOKEN_SCOPES,
+                    networks=networks,
+                )
+            except MqttcoreBadRequestError as err:
+                if "maintenance" not in err.message:
+                    raise
+                # A cluster before 0.30.0: no maintenance area yet. A repair
+                # asks for a new token once it has one.
+                LOGGER.debug("No maintenance area here (%s): legacy scopes", err)
+                token = await client.create_token(
+                    ota_password=password,
+                    name=name,
+                    scopes=TOKEN_SCOPES_LEGACY,
+                    networks=networks,
+                )
         except MqttcoreBadRequestError as err:
             raise FlowError("token_refused", {"error": err.message}) from err
         except MqttcoreError as err:
@@ -422,11 +487,11 @@ class MqttcoreConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_hassio(
         self, discovery_info: HassioServiceInfo
     ) -> ConfigFlowResult:
-        """The MQTT Core app announced itself to the Supervisor.
+        """The MQTT Core app announced itself to the Supervisor (MQTT Core 0.30.0).
 
-        STUB for phase 1: the app does not announce `mqttcore` discovery yet,
-        and its payload is not settled. This expects `host`, `port`, `ssl`
-        and, when the cluster has one, `server_name`.
+        Its payload (host/supervisor.c): `host` and `port` of the cluster's
+        console (its name on 443 when it has one), `ssl`, and `server_name`,
+        the cluster's name, which identifies the cluster as zeroconf's does.
         """
         config = discovery_info.config
         host = str(config.get(CONF_HOST) or "").strip()
@@ -486,3 +551,126 @@ class MqttcoreConfigFlow(ConfigFlow, domain=DOMAIN):
                     self._url = url
                     break
         return await self._async_credentials_step("reauth_confirm", user_input)
+
+
+SERVERS: Final = ("mqtt", "mqtts", "ws", "wss", "http", "https")
+
+
+class MqttcoreOptionsFlow(OptionsFlow):
+    """The cluster's listener settings (`POST /api/config`, shared).
+
+    The OTA password is asked each time and kept only while the flow runs:
+    no token reaches `POST /api/config`. The settings are the cluster's: a
+    node that follows them uses them from its next start.
+    """
+
+    def __init__(self) -> None:
+        """Nothing read yet."""
+        self._password: str | None = None
+        self._listeners: dict[str, Any] = {}
+
+    def _client(self) -> MqttcoreClient:
+        entry = self.config_entry
+        url = entry.runtime_data.cluster.active_url
+        if url is None:
+            raise FlowError("cannot_connect")
+        verify = bool(entry.data.get(CONF_VERIFY_SSL, True))
+        return MqttcoreClient(
+            async_get_clientsession(self.hass, verify_ssl=verify),
+            url,
+            verify_ssl=verify,
+        )
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Ask for the OTA password, then read the listeners with it."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            password = user_input[CONF_OTA_PASSWORD]
+            try:
+                config = await self._client().get_config(ota_password=password)
+            except FlowError as err:
+                errors["base"] = err.code
+            except MqttcoreError as err:
+                errors["base"] = _error_code(err, ssl=True)
+            else:
+                listeners = config.raw.get("listeners")
+                if isinstance(listeners, dict):
+                    self._password = password
+                    self._listeners = listeners
+                    return await self.async_step_listeners()
+                errors["base"] = "no_listeners"
+        return self.async_show_form(
+            step_id="init",
+            data_schema=probatio.Schema(
+                {
+                    probatio.Required(probatio.Secret(CONF_OTA_PASSWORD)): TextSelector(
+                        TextSelectorConfig(type=TextSelectorType.PASSWORD)
+                    )
+                }
+            ),
+            errors=errors,
+        )
+
+    def _current(self, server: str) -> tuple[bool, int]:
+        cur = self._listeners.get(server)
+        cur = cur if isinstance(cur, dict) else {}
+        port = cur.get("port")
+        return bool(cur.get("enabled")), port if isinstance(port, int) else 1
+
+    async def async_step_listeners(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Each server on or off, and its port; only what changed is sent."""
+        errors: dict[str, str] = {}
+        placeholders = {"error": ""}
+        if user_input is not None and self._password is not None:
+            change: dict[str, Any] = {}
+            for server in SERVERS:
+                wanted = (
+                    bool(user_input[f"{server}_enabled"]),
+                    int(user_input[f"{server}_port"]),
+                )
+                if wanted != self._current(server):
+                    change[server] = {"enabled": wanted[0], "port": wanted[1]}
+            path = str(user_input["ws_path"])
+            if path != self._listeners.get("ws_path"):
+                change["ws_path"] = path
+            if not change:
+                return self.async_abort(reason="listeners_unchanged")
+            try:
+                answer = await self._client().set_config(
+                    {"listeners": change}, ota_password=self._password
+                )
+            except MqttcoreBadRequestError as err:
+                errors["base"] = "listeners_refused"
+                placeholders["error"] = err.message
+            except FlowError as err:
+                errors["base"] = err.code
+            except MqttcoreError as err:
+                errors["base"] = _error_code(err, ssl=True)
+            else:
+                self._password = None
+                return self.async_abort(
+                    reason="listeners_saved",
+                    description_placeholders={
+                        "message": str(answer.get("message") or "")
+                    },
+                )
+        fields: dict[Any, Any] = {}
+        for server in SERVERS:
+            on, port = self._current(server)
+            fields[probatio.Required(f"{server}_enabled", default=on)] = bool
+            fields[probatio.Required(f"{server}_port", default=port)] = cv.port
+        fields[
+            probatio.Required(
+                "ws_path", default=self._listeners.get("ws_path", "/mqtt")
+            )
+        ] = str
+        return self.async_show_form(
+            step_id="listeners",
+            data_schema=probatio.Schema(fields),
+            errors=errors,
+            description_placeholders=placeholders,
+        )

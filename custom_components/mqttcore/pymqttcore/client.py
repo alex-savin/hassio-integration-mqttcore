@@ -39,16 +39,18 @@ from .models import (
     AuthStatus,
     ClusterStatus,
     Device,
+    OtaState,
     ServerConfig,
     Stats,
     TlsStatus,
     TokenInfo,
+    UpdateCheck,
 )
 
 DEFAULT_TIMEOUT: Final = 10.0
 
 # Areas a token may be granted, and the access each may have.
-TOKEN_AREAS: Final = ("status", "clients", "access", "system")
+TOKEN_AREAS: Final = ("status", "clients", "access", "system", "maintenance")
 TOKEN_ACCESS: Final = ("none", "read", "write")
 
 
@@ -149,8 +151,11 @@ class MqttcoreClient:
         body: Mapping[str, Any] | None = None,
         ota_password: str | None = None,
         use_token: bool = True,
+        text: str | None = None,
     ) -> Any:
         """Call a route and return its JSON answer.
+
+        `text` sends a plain-text body instead of JSON (the ACL's upload).
 
         `node_id` relays the call to that member of the node's cluster.
         Raises a `MqttcoreResponseError` subclass for an error status,
@@ -163,7 +168,10 @@ class MqttcoreClient:
         if ota_password is not None:
             headers["X-OTA-Password"] = ota_password
         data: str | None = None
-        if method.upper() == "POST":
+        if text is not None:
+            headers["Content-Type"] = "text/plain; charset=utf-8"
+            data = text
+        elif method.upper() == "POST":
             headers["Content-Type"] = "application/json"
             data = json.dumps(dict(body or {}))
         target = self._target(path, node_id)
@@ -236,6 +244,19 @@ class MqttcoreClient:
                 "/api/config", ota_password=ota_password, use_token=use_token
             )
         )
+
+    async def set_config(
+        self, changes: Mapping[str, Any], *, ota_password: str
+    ) -> dict[str, Any]:
+        """`POST /api/config`: change settings (the OTA password; no token reaches it)."""
+        answer = await self.request(
+            "POST",
+            "/api/config",
+            body=changes,
+            ota_password=ota_password,
+            use_token=False,
+        )
+        return answer if isinstance(answer, dict) else {}
 
     async def get_cluster(
         self, *, node_id: str | None = None, ota_password: str | None = None
@@ -331,4 +352,91 @@ class MqttcoreClient:
             body={"action": "revoke", "name": name},
             ota_password=ota_password,
             use_token=False,
+        )
+
+    async def get_token_self(self, *, node_id: str | None = None) -> TokenInfo:
+        """`GET /api/agents/self` (0.30.0): the token this client sends, and its scopes."""
+        return TokenInfo.from_dict(
+            await self._get_object("/api/agents/self", node_id=node_id)
+        )
+
+    # ---- maintenance (0.30.0: the `maintenance` area) -----------------------------------
+
+    async def get_ota(self, *, node_id: str | None = None) -> OtaState:
+        """`GET /api/ota`: the board's image state and any install's progress."""
+        return OtaState.from_dict(await self._get_object("/api/ota", node_id=node_id))
+
+    async def check_update(self, *, node_id: str | None = None) -> UpdateCheck:
+        """`POST /api/update/check`: what the update server offers this board."""
+        answer = await self.request(
+            "POST", "/api/update/check", node_id=node_id, body={}
+        )
+        return UpdateCheck.from_dict(answer)
+
+    async def install_update(self, version: str, *, node_id: str | None = None) -> None:
+        """`POST /api/update/install`: install the release the check offered (202)."""
+        await self.request(
+            "POST", "/api/update/install", node_id=node_id, body={"version": version}
+        )
+
+    async def restart(self, *, node_id: str | None = None) -> None:
+        """`POST /api/restart`: the board restarts about 1.5 s after the answer."""
+        await self.request("POST", "/api/restart", node_id=node_id, body={})
+
+    async def issue_certificate(self, *, node_id: str | None = None) -> None:
+        """`POST /api/acme/issue`: order a certificate now (the leader only)."""
+        await self.request("POST", "/api/acme/issue", node_id=node_id, body={})
+
+    async def get_release_notes(self, url: str) -> str:
+        """The release notes (Markdown) the update server keeps; no credentials go."""
+        try:
+            async with self._session.get(
+                url, timeout=self._timeout, allow_redirects=False
+            ) as response:
+                if response.status != 200:
+                    raise MqttcoreConnectionError(f"{url}: HTTP {response.status}")
+                return await response.text(errors="replace")
+        except TimeoutError as err:
+            raise MqttcoreConnectionError(f"{url}: no answer in time") from err
+        except aiohttp.ClientError as err:
+            raise MqttcoreConnectionError(f"{url}: {err}") from err
+
+    # ---- users, the ACL and clients (the `access` and `clients` areas) ------------------
+
+    async def get_users(self) -> dict[str, Any]:
+        """`GET /api/access/users`: the user names, and whether anonymous clients may connect."""
+        return await self._get_object("/api/access/users")
+
+    async def change_user(
+        self, action: str, name: str, password: str | None = None
+    ) -> dict[str, Any]:
+        """`POST /api/access/users`: `add`, `set_password` or `remove` a user."""
+        body: dict[str, Any] = {"action": action, "name": name}
+        if password is not None:
+            body["password"] = password
+        answer = await self.request("POST", "/api/access/users", body=body)
+        return answer if isinstance(answer, dict) else {}
+
+    async def get_acl(self) -> dict[str, Any]:
+        """`GET /api/access/acl`: the ACL in force, as text and as rules."""
+        return await self._get_object("/api/access/acl")
+
+    async def set_acl(self, text: str) -> dict[str, Any]:
+        """`POST /api/access/acl`: replace the whole ACL with this text."""
+        answer = await self.request("POST", "/api/access/acl", text=text)
+        return answer if isinstance(answer, dict) else {}
+
+    async def get_clients(self, *, node_id: str | None = None) -> list[dict[str, Any]]:
+        """`GET /api/clients`: the clients connected to the node."""
+        answer = await self.request("GET", "/api/clients", node_id=node_id)
+        return (
+            [c for c in answer if isinstance(c, dict)]
+            if isinstance(answer, list)
+            else []
+        )
+
+    async def kick_client(self, client_id: str, *, node_id: str | None = None) -> None:
+        """`POST /api/clients/kick`: disconnect the client (MQTT 5: reason 0x98)."""
+        await self.request(
+            "POST", "/api/clients/kick", node_id=node_id, body={"client_id": client_id}
         )
