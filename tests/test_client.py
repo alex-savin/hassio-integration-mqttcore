@@ -8,7 +8,11 @@ import json
 from typing import Any
 from unittest.mock import Mock
 
-from aiohttp import ClientConnectorCertificateError, ClientSession
+from aiohttp import (
+    ClientConnectionError,
+    ClientConnectorCertificateError,
+    ClientSession,
+)
 import pytest
 from pytest_homeassistant.test_util.aiohttp import AiohttpClientMocker
 
@@ -422,3 +426,57 @@ def test_acme_model() -> None:
     unknown = AcmeStatus.from_dict({"days_until_expiry": -1, "state": "idle"})
     assert unknown.days_until_expiry is None
     assert unknown.last_success is None
+
+
+async def test_at_an_address(
+    session: ClientSession, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """An address client connects there, and still names the node it means."""
+    aioclient_mock.get(
+        "https://192.0.2.15:8443/api/stats", json=load("stats_mqtt05.json")
+    )
+    client = MqttcoreClient(
+        session, "https://mqtt05.example.com:8443/", token=TOKEN, address="192.0.2.15"
+    )
+    assert client.url == "https://mqtt05.example.com:8443/"
+    assert client.address == "192.0.2.15"
+    await client.get_stats()
+    _, url, _, headers = aioclient_mock.mock_calls[-1]
+    assert str(url) == "https://192.0.2.15:8443/api/stats"
+    assert headers["Host"] == "mqtt05.example.com:8443"
+
+
+def test_at_an_address_names_the_server_for_tls(session: ClientSession) -> None:
+    """TLS gets the name (SNI and the certificate's check); the default port is left out."""
+    client = MqttcoreClient(session, f"{BASE}/", address="192.0.2.11")
+    headers: dict[str, str] = {}
+    target, extra = client._at_address(client._target("/api/device", None), headers)
+    assert str(target) == "https://192.0.2.11/api/device"
+    assert headers == {"Host": "mqtt01.example.com"}
+    assert extra == {"server_hostname": "mqtt01.example.com"}
+    relayed, _ = client._at_address(client._target("/api/stats", NODE04), {})
+    assert relayed.host == "192.0.2.11"
+    assert relayed.query["node"] == NODE04
+
+
+def test_without_an_address_nothing_changes(client: MqttcoreClient) -> None:
+    """A client without an address leaves the request as it was."""
+    headers: dict[str, str] = {}
+    target, extra = client._at_address(client._target("/api/device", None), headers)
+    assert str(target) == f"{BASE}/api/device"
+    assert headers == {}
+    assert extra == {}
+
+
+async def test_an_address_that_fails_says_so(
+    session: ClientSession, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """A connection error names the node and the address tried."""
+    aioclient_mock.get(
+        "https://192.0.2.11/api/stats", exc=ClientConnectionError("refused")
+    )
+    client = MqttcoreClient(session, f"{BASE}/", address="192.0.2.11")
+    with pytest.raises(
+        MqttcoreConnectionError, match=r"mqtt01\.example\.com \(192\.0\.2\.11\)"
+    ):
+        await client.get_stats()

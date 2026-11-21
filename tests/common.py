@@ -41,6 +41,12 @@ NODES = {
     NODE04: ("mqtt04", URL04),
     NODE05: ("mqtt05", URL05),
 }
+# Each node's URL at the address the cluster reports for it (its port kept).
+AT_ADDRESS = {
+    URL01: "https://192.0.2.11",
+    URL04: "https://192.0.2.14",
+    URL05: "https://192.0.2.15:8443",
+}
 
 TOKEN = "mqc_" + "T" * 43
 NEW_TOKEN = "mqc_" + "N" * 43
@@ -151,18 +157,30 @@ def node_post_routes(short: str) -> dict[str, tuple[int, Any]]:
     }
 
 
+def _ways(url: str, down: set[str], unresolved: set[str]) -> list[tuple[str, bool]]:
+    """A node's base URLs, by name and at its address, and whether each answers."""
+    return [
+        (url, url not in down and url not in unresolved),
+        (AT_ADDRESS[url], url not in down),
+    ]
+
+
 def mock_cluster(
     aioclient_mock: AiohttpClientMocker,
     *,
     down: Iterable[str] = (),
+    unresolved: Iterable[str] = (),
     overrides: dict[tuple[str, str], tuple[int, Any]] | None = None,
 ) -> None:
     """Register the three nodes, directly and through each other's relay.
 
-    `down` lists base URLs that do not answer. `overrides` replaces single
-    answers, keyed by (base URL, path).
+    Each node answers at its URL and at its address. `down` lists base URLs
+    whose nodes do not answer at either; `unresolved` lists base URLs whose
+    name does not resolve, so that only the address answers. `overrides`
+    replaces single answers, keyed by (base URL, path).
     """
     down = set(down)
+    unresolved = set(unresolved)
     overrides = overrides or {}
     for node_id, (short, url) in NODES.items():
         for method, routes in (
@@ -172,21 +190,23 @@ def mock_cluster(
             register = getattr(aioclient_mock, method)
             for path, answer in routes.items():
                 status, body = overrides.get((url, path), answer)
-                if url in down:
-                    register(f"{url}{path}", exc=ClientConnectionError("down"))
-                else:
-                    register(f"{url}{path}", status=status, json=body)
+                for base, answers in _ways(url, down, unresolved):
+                    if answers:
+                        register(f"{base}{path}", status=status, json=body)
+                    else:
+                        register(f"{base}{path}", exc=ClientConnectionError("down"))
                 # The same answer through every other node's relay.
                 for other_id, (_, other_url) in NODES.items():
                     if other_id == node_id:
                         continue
-                    relay = f"{other_url}/api/peer?node={node_id}&path={path}"
-                    if other_url in down:
-                        register(relay, exc=ClientConnectionError("down"))
-                    elif url in down:
-                        register(relay, status=502, json={"error": "not linked"})
-                    else:
-                        register(relay, status=status, json=body)
+                    for base, answers in _ways(other_url, down, unresolved):
+                        relay = f"{base}/api/peer?node={node_id}&path={path}"
+                        if not answers:
+                            register(relay, exc=ClientConnectionError("down"))
+                        elif url in down:
+                            register(relay, status=502, json={"error": "not linked"})
+                        else:
+                            register(relay, status=status, json=body)
 
 
 def get_device(

@@ -115,13 +115,21 @@ class MqttcoreClient:
         token: str | None = None,
         verify_ssl: bool = True,
         request_timeout: float = DEFAULT_TIMEOUT,
+        address: str | None = None,
     ) -> None:
-        """Talk to the node at `url` (its base URL) over `session`."""
+        """Talk to the node at `url` (its base URL) over `session`.
+
+        `address` connects to that IP address instead of what DNS answers
+        for the URL's name (a name the resolver does not know). The node's
+        certificate is still checked against the name, and the Host header
+        still names it, so the node's host check sees the name it serves.
+        """
         self._session = session
         self._base = URL(url)
         self._token = token
         self._verify_ssl = verify_ssl
         self._timeout = aiohttp.ClientTimeout(total=request_timeout)
+        self._address = address or None
 
     @property
     def url(self) -> str:
@@ -132,6 +140,38 @@ class MqttcoreClient:
     def host(self) -> str:
         """The host part of the base URL."""
         return self._base.host or ""
+
+    @property
+    def address(self) -> str | None:
+        """The IP address connected to instead of the name's, if any."""
+        return self._address
+
+    @property
+    def _where(self) -> str:
+        """The node, for messages: its name, and the address when one is used."""
+        return self.host if self._address is None else f"{self.host} ({self._address})"
+
+    def _host_header(self) -> str:
+        """The base URL's host and, when not the scheme's default, its port."""
+        if self._base.is_default_port():
+            return self.host
+        return f"{self.host}:{self._base.port}"
+
+    def _at_address(
+        self, target: URL, headers: dict[str, str]
+    ) -> tuple[URL, dict[str, Any]]:
+        """`target` at the address, when one is set, and the request's extras.
+
+        The Host header goes into `headers`; the extras name the server for
+        TLS (SNI and the certificate's check).
+        """
+        if self._address is None or not self.host:
+            return target, {}
+        headers["Host"] = self._host_header()
+        extra: dict[str, Any] = {}
+        if self._base.scheme == "https":
+            extra["server_hostname"] = self.host
+        return target.with_host(self._address), extra
 
     # ---- transport ----------------------------------------------------------------------
 
@@ -174,7 +214,7 @@ class MqttcoreClient:
         elif method.upper() == "POST":
             headers["Content-Type"] = "application/json"
             data = json.dumps(dict(body or {}))
-        target = self._target(path, node_id)
+        target, extra = self._at_address(self._target(path, node_id), headers)
         try:
             async with self._session.request(
                 method,
@@ -184,20 +224,21 @@ class MqttcoreClient:
                 timeout=self._timeout,
                 allow_redirects=False,
                 ssl=self._verify_ssl,
+                **extra,
             ) as response:
                 status = response.status
                 response_headers = dict(response.headers)
                 text = await response.text(errors="replace")
         except aiohttp.ClientConnectorCertificateError as err:
             raise MqttcoreTlsError(
-                f"{self.host}: certificate not trusted: {err}"
+                f"{self._where}: certificate not trusted: {err}"
             ) from err
         except aiohttp.ClientSSLError as err:
-            raise MqttcoreTlsError(f"{self.host}: TLS failed: {err}") from err
+            raise MqttcoreTlsError(f"{self._where}: TLS failed: {err}") from err
         except TimeoutError as err:
-            raise MqttcoreConnectionError(f"{self.host}: no answer in time") from err
+            raise MqttcoreConnectionError(f"{self._where}: no answer in time") from err
         except aiohttp.ClientError as err:
-            raise MqttcoreConnectionError(f"{self.host}: {err}") from err
+            raise MqttcoreConnectionError(f"{self._where}: {err}") from err
 
         try:
             decoded: Any = json.loads(text) if text else None

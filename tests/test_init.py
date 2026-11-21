@@ -12,12 +12,13 @@ from pytest_homeassistant.test_util.aiohttp import AiohttpClientMocker
 from custom_components.mqttcore.const import CONF_KNOWN_URLS, DOMAIN, LOCAL_NODE
 from custom_components.mqttcore.coordinator import MqttcoreNodeCoordinator
 from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
-from homeassistant.const import Platform
+from homeassistant.const import CONF_HOST, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.setup import async_setup_component
 
 from .common import (
+    AT_ADDRESS,
     NODE01,
     NODE04,
     NODE05,
@@ -158,8 +159,9 @@ async def test_node_read_through_relay(
     """A node Home Assistant cannot reach directly is read through the relay."""
     # mqtt05 is unreachable from Home Assistant, but linked to mqtt01.
     mock_cluster(aioclient_mock)
-    for path in ("/api/cluster", "/api/stats", "/api/device"):
-        prepend(aioclient_mock, f"{URL05}{path}", exc=ClientConnectionError())
+    for base in (URL05, AT_ADDRESS[URL05]):
+        for path in ("/api/cluster", "/api/stats", "/api/device"):
+            prepend(aioclient_mock, f"{base}{path}", exc=ClientConnectionError())
     await _setup(hass, mock_config_entry)
     node = mock_config_entry.runtime_data.nodes.nodes[NODE05]
     assert node.last_update_success
@@ -169,7 +171,7 @@ async def test_node_read_through_relay(
     assert state.state == "3"
     # Once failed, the relay comes first.
     routes = node._routes()
-    assert routes[0][1] == NODE05
+    assert routes[0].relay_node == NODE05
 
 
 async def test_known_urls_follow_the_members(
@@ -393,11 +395,95 @@ async def test_another_node_answering_is_refused(
 ) -> None:
     """A node URL that reaches another member is not taken for the node."""
     mock_cluster(aioclient_mock)
-    # mqtt05's name reaches mqtt04 (a stale DNS record, say); its relay is right.
+    # mqtt05's name reaches mqtt04 (a stale DNS record, say); its address is right.
     prepend(aioclient_mock, f"{URL05}/api/cluster", json=view("mqtt04"))
+    await _setup(hass, mock_config_entry)
+    node = mock_config_entry.runtime_data.nodes.nodes[NODE05]
+    assert node.last_update_success
+    assert not node.data.relayed
+    assert node.data.cluster is not None
+    assert node.data.cluster.node_id == NODE05
+    assert any(
+        str(url).startswith(f"{AT_ADDRESS[URL05]}/api/stats")
+        for _, url, _, _ in aioclient_mock.mock_calls
+    )
+
+
+async def test_another_node_at_both_is_read_through_relay(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """When the name and the address both reach another member, the relay serves."""
+    mock_cluster(aioclient_mock)
+    for base in (URL05, AT_ADDRESS[URL05]):
+        prepend(aioclient_mock, f"{base}/api/cluster", json=view("mqtt04"))
     await _setup(hass, mock_config_entry)
     node = mock_config_entry.runtime_data.nodes.nodes[NODE05]
     assert node.last_update_success
     assert node.data.relayed
     assert node.data.cluster is not None
     assert node.data.cluster.node_id == NODE05
+
+
+async def test_member_names_that_do_not_resolve(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Members whose names the resolver does not know are read at their addresses.
+
+    The cluster's own name resolves, and reaches mqtt04, a Linux node: the
+    certificate comes from the board through mqtt04's relay, at mqtt04's
+    address, and every node answers on the first refresh.
+    """
+    mock_config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        mock_config_entry,
+        data={**mock_config_entry.data, CONF_HOST: UNIQUE_ID, CONF_KNOWN_URLS: []},
+    )
+    mock_cluster(aioclient_mock, unresolved=[URL01, URL04, URL05])
+    aioclient_mock.get(f"https://{UNIQUE_ID}/api/cluster", json=view("mqtt04"))
+    await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    expiry = hass.states.get("sensor.mqtt_example_com_certificate_expiry")
+    assert expiry is not None
+    assert expiry.state == "2027-01-30T08:11:59+00:00"
+    problem = hass.states.get("binary_sensor.mqtt_example_com_certificate")
+    assert problem is not None
+    assert problem.state == "off"
+    assert any(
+        str(url).startswith(f"{AT_ADDRESS[URL04]}/api/peer")
+        and url.query.get("node") == NODE01
+        and url.query.get("path") == "/api/tls/status"
+        for _, url, _, _ in aioclient_mock.mock_calls
+    )
+    for node in mock_config_entry.runtime_data.nodes.nodes.values():
+        assert node.last_update_success
+        assert not node.data.relayed  # each at its address
+    assert "Error fetching" not in caplog.text
+
+
+async def test_certificate_comes_again_on_the_next_refresh(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """A certificate reading that reached no node is tried again at once."""
+    mock_cluster(aioclient_mock)
+    for base in (URL01, AT_ADDRESS[URL01]):
+        for path in ("/api/tls/status", "/api/acme"):
+            prepend(aioclient_mock, f"{base}{path}", exc=ClientConnectionError())
+    await _setup(hass, mock_config_entry)
+    expiry = hass.states.get("sensor.mqtt_example_com_certificate_expiry")
+    assert expiry is not None
+    assert expiry.state == "unavailable"
+
+    aioclient_mock.clear_requests()
+    mock_cluster(aioclient_mock)
+    await refresh_all(hass, mock_config_entry)
+    expiry = hass.states.get("sensor.mqtt_example_com_certificate_expiry")
+    assert expiry is not None
+    assert expiry.state == "2027-01-30T08:11:59+00:00"

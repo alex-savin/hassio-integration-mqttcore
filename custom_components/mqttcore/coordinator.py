@@ -9,8 +9,10 @@ and run ACME.
 
 Each node has its own coordinator for its `GET /api/stats`, its own view
 of the cluster (its links, its Raft store) and, now and then,
-`GET /api/device`. It asks the node directly at its URL, or through the
-answering node's relay when that fails.
+`GET /api/device`. It asks the node directly at its URL, then at the
+address the cluster reports for it (a name the resolver does not know; the
+certificate is still checked against the name), or through the answering
+node's relay when those fail.
 
 `MqttcoreNodeManager` follows the member list: it adds a node coordinator
 (and its entities) when a member joins, and removes a member's device when
@@ -73,6 +75,24 @@ if TYPE_CHECKING:
 
 def _now() -> float:
     return time.monotonic()
+
+
+def address_key(url: str, address: str) -> str:
+    """The backoff key of a node URL reached at an address instead of its name."""
+    return f"{url}@{address}"
+
+
+@dataclass(frozen=True, slots=True)
+class Route:
+    """One way to a node: a client and, through a relay, the node's ID.
+
+    `key` is what `mark_failed` and `mark_ok` take: the URL, or the URL and
+    address, of the node connected to (for a relay, the relaying node's).
+    """
+
+    client: MqttcoreClient
+    relay_node: str | None = None
+    key: str | None = None
 
 
 @dataclass(slots=True)
@@ -173,32 +193,61 @@ class MqttcoreClusterCoordinator(DataUpdateCoordinator[ClusterData]):
 
     # ---- endpoints ----------------------------------------------------------------------
 
-    def client_for(self, url: str) -> MqttcoreClient:
-        """The client for one node URL (made once)."""
-        if (client := self._clients.get(url)) is None:
+    def client_for(self, url: str, address: str | None = None) -> MqttcoreClient:
+        """The client for one node URL, or for it at `address` (made once)."""
+        key = url if address is None else address_key(url, address)
+        if (client := self._clients.get(key)) is None:
             client = MqttcoreClient(
-                self._session, url, token=self._token, verify_ssl=self._verify_ssl
+                self._session,
+                url,
+                token=self._token,
+                verify_ssl=self._verify_ssl,
+                address=address,
             )
-            self._clients[url] = client
+            self._clients[key] = client
         return client
+
+    def member_routes(self, member: ClusterMember | None) -> list[Route]:
+        """The direct ways to a member: its URL, then its address.
+
+        The address is the one the cluster reports; the certificate is still
+        checked against the member's name. It serves when the resolver does
+        not know the name. Ways that failed lately come last.
+        """
+        if member is None or (url := member.url) is None:
+            return []
+        routes = [Route(self.client_for(url), key=url)]
+        if member.address and member.address != member.host_name:
+            key = address_key(url, member.address)
+            routes.append(Route(self.client_for(url, member.address), key=key))
+        return [r for r in routes if not self._failed(r)] + [
+            r for r in routes if self._failed(r)
+        ]
+
+    def _failed(self, route: Route) -> bool:
+        return route.key is not None and self.in_backoff(route.key)
 
     @property
     def active_client(self) -> MqttcoreClient | None:
         """The client of the node that answered last."""
         return None if self.active_url is None else self.client_for(self.active_url)
 
-    @property
-    def relay_client(self) -> MqttcoreClient | None:
-        """A client for the node the cluster was read from, at its own URL.
+    def relay_routes(self, node_id: str) -> list[Route]:
+        """Ways to `node_id` through the relay of the node the cluster was read from.
 
-        Its relay reaches the other members. Its own URL, not the configured
-        one: that may be the cluster's name, and a relay asked of the node it
-        names fails.
+        That node at its own URL, then at its address: not at the configured
+        URL, which may be the cluster's name, and a relay asked of the node
+        it names fails. The configured URL only when the node has no URL.
+        `key` is the relaying node's way, to mark when it does not connect.
         """
         me = self.data.cluster.self_member if self.data is not None else None
-        if me is not None and me.url is not None and not self.in_backoff(me.url):
-            return self.client_for(me.url)
-        return self.active_client
+        routes = [
+            Route(r.client, relay_node=node_id, key=r.key)
+            for r in self.member_routes(me)
+        ]
+        if not routes and (active := self.active_client) is not None:
+            routes.append(Route(active, relay_node=node_id))
+        return routes
 
     @property
     def active_node_id(self) -> str | None:
@@ -260,12 +309,7 @@ class MqttcoreClusterCoordinator(DataUpdateCoordinator[ClusterData]):
             if url != self.active_url:
                 LOGGER.debug("Reading the cluster from %s", url)
             self.active_url = url
-            me = cluster.self_member
-            own = me.url if me is not None and me.url else None
-            node_client = (
-                self.client_for(own) if own and not self.in_backoff(own) else client
-            )
-            await self._async_refresh_certificate(node_client, cluster)
+            await self._async_refresh_certificate(client, cluster)
             self._async_remember_urls(cluster)
             return ClusterData(
                 cluster=cluster, endpoint=url, tls=self._tls, acme=self._acme
@@ -287,7 +331,13 @@ class MqttcoreClusterCoordinator(DataUpdateCoordinator[ClusterData]):
     async def _async_refresh_certificate(
         self, client: MqttcoreClient, cluster: ClusterStatus
     ) -> None:
-        """Read the shared certificate and the renewal, every few minutes."""
+        """Read the shared certificate and the renewal, every few minutes.
+
+        From the node that answered, at its own name, then at its address,
+        then at the URL it answered on (the cluster's name may reach another
+        member). A way that does not connect moves on to the next; when none
+        does, the next refresh tries again rather than ten minutes later.
+        """
         now = _now()
         if (
             self._certificate_at is not None
@@ -295,10 +345,35 @@ class MqttcoreClusterCoordinator(DataUpdateCoordinator[ClusterData]):
             < CERTIFICATE_REFRESH_INTERVAL.total_seconds()
         ):
             return
-        self._certificate_at = now
         source = _certificate_source(cluster)
+        routes = self.member_routes(cluster.self_member)
+        if all(r.client is not client for r in routes):
+            routes.append(Route(client))
+        for route in routes:
+            try:
+                await self._async_read_certificate(route.client, source)
+            except MqttcoreConnectionError as err:
+                LOGGER.debug("Certificate via %s: %s", route.client.url, err)
+                if route.key is not None:
+                    self.mark_failed(route.key)
+                continue
+            if route.key is not None:
+                self.mark_ok(route.key)
+            self._certificate_at = now
+            return
+
+    async def _async_read_certificate(
+        self, client: MqttcoreClient, source: str | None
+    ) -> None:
+        """One reading of the certificate and the renewal.
+
+        Raises `MqttcoreConnectionError` when the node is not reached; any
+        answer, an error one included, is the reading.
+        """
         try:
             self._tls = await client.get_tls_status(node_id=source)
+        except MqttcoreConnectionError:
+            raise
         except MqttcoreForbiddenError as err:
             LOGGER.debug("The token does not read the system area: %s", err)
             self._tls = None
@@ -306,6 +381,8 @@ class MqttcoreClusterCoordinator(DataUpdateCoordinator[ClusterData]):
             LOGGER.debug("Could not read the certificate: %s", err)
         try:
             self._acme = await client.get_acme(node_id=source)
+        except MqttcoreConnectionError:
+            raise
         except MqttcoreNotSupportedError, MqttcoreForbiddenError:
             self._acme = None  # the host binary, or no system scope
         except MqttcoreError as err:
@@ -361,34 +438,29 @@ class MqttcoreNodeCoordinator(DataUpdateCoordinator[NodeData]):
         """The node belongs to a cluster."""
         return self.node_id != LOCAL_NODE
 
-    def _routes(self) -> list[tuple[MqttcoreClient, str | None, str | None]]:
-        """Ways to reach the node: (client, relay node ID, direct URL).
+    def _routes(self) -> list[Route]:
+        """Ways to reach the node.
 
-        The node's own URL first; then the relay of the node the cluster was
-        read from, at that node's own URL. The configured URL comes last for
-        the node that answered on it: it may be the cluster's name, which
-        DNS can answer with any member.
+        The node's own URL first, then its address (a name the resolver does
+        not know); then the relay of the node the cluster was read from, at
+        that node's own URL or address. Direct ways that failed lately come
+        after the relay. The configured URL comes last for the node that
+        answered on it: it may be the cluster's name, which DNS can answer
+        with any member.
         """
         cc = self.cluster
         active = cc.active_client
         if not self.clustered:
-            return [] if active is None else [(active, None, cc.active_url)]
-        routes: list[tuple[MqttcoreClient, str | None, str | None]] = []
-        member = self.member
-        direct = member.url if member is not None else None
-        if direct is not None:
-            routes.append((cc.client_for(direct), None, direct))
+            return [] if active is None else [Route(active, key=cc.active_url)]
+        direct = cc.member_routes(self.member)
+        fresh = [r for r in direct if r.key is None or not cc.in_backoff(r.key)]
+        failed = [r for r in direct if r not in fresh]
         if cc.active_node_id == self.node_id:
-            if active is not None and cc.active_url != direct:
-                routes.append((active, None, cc.active_url))
+            routes = fresh + failed
+            if active is not None and all(r.client is not active for r in routes):
+                routes.append(Route(active, key=cc.active_url))
             return routes
-        if (relay := cc.relay_client) is not None:
-            via_relay = (relay, self.node_id, None)
-            if direct is not None and cc.in_backoff(direct):
-                routes.insert(0, via_relay)
-            else:
-                routes.append(via_relay)
-        return routes
+        return fresh + cc.relay_routes(self.node_id) + failed
 
     @property
     def is_board(self) -> bool:
@@ -406,29 +478,35 @@ class MqttcoreNodeCoordinator(DataUpdateCoordinator[NodeData]):
         next; any answer, an error one included, is the node's.
         """
         last_error: MqttcoreConnectionError | None = None
-        for client, relay_node, _direct_url in self._routes():
+        for route in self._routes():
             try:
-                return await call(client, relay_node)
+                return await call(route.client, route.relay_node)
             except MqttcoreConnectionError as err:
-                LOGGER.debug("Node %s via %s: %s", self.node_id, client.url, err)
+                LOGGER.debug("Node %s via %s: %s", self.node_id, route.client.url, err)
                 last_error = err
         raise MqttcoreConnectionError(str(last_error or "no route to the node"))
 
     async def _async_update_data(self) -> NodeData:
         """Read the node's counters, its view of the cluster and its device."""
         last_error: Exception | None = None
-        for client, relay_node, direct_url in self._routes():
+        for route in self._routes():
+            client, relay_node = route.client, route.relay_node
             try:
                 view = await self._async_read_view(client, relay_node)
                 stats = await client.get_stats(node_id=relay_node)
             except MqttcoreError as err:
                 LOGGER.debug("Node %s via %s: %s", self.node_id, client.url, err)
-                if direct_url is not None:
-                    self.cluster.mark_failed(direct_url)
+                # A relay's error may be the far node's; only one that did
+                # not connect is the relaying node's.
+                unreached = relay_node is None or isinstance(
+                    err, MqttcoreConnectionError
+                )
+                if route.key is not None and unreached:
+                    self.cluster.mark_failed(route.key)
                 last_error = err
                 continue
-            if direct_url is not None:
-                self.cluster.mark_ok(direct_url)
+            if route.key is not None:
+                self.cluster.mark_ok(route.key)
             await self._async_refresh_device(client, relay_node)
             rates = self._rates(stats)
             return NodeData(

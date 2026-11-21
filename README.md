@@ -81,8 +81,11 @@ them.
 The integration talks to the configured node first. When it does not
 answer, it uses any other member, at the URL the cluster gives for it
 (`https://<host_name>[:<web_port>]/`). Each node is read directly at its
-own URL, or through the answering node's relay (`/api/peer`) when Home
-Assistant cannot reach it.
+own URL; then at the address the cluster reports for it, when Home
+Assistant's resolver does not know the name (the certificate is still
+checked against the name, and the Host header still names it); or through
+the answering node's relay (`/api/peer`) when Home Assistant cannot reach
+it at all.
 
 ### The cluster device
 
@@ -94,7 +97,7 @@ Assistant cannot reach it.
 | Raft term (diagnostic, disabled) | sensor | `raft.term` |
 | Connections | sensor | sum of `members[].load` of the live members |
 | Messages received / sent | sensor, msg/s | sum of the nodes' rates (below) |
-| Retained messages | sensor | `raft.retained.topics` (the cluster's one set); without Raft, the largest node's `retained` |
+| Retained messages | sensor | `raft.retained.topics` (the cluster's one set; each node's own `$SYS` topics are not in it, but are in the node's count); without Raft, the largest node's `retained` |
 | Failed logins | sensor, total increasing | sum of the nodes' `GET /api/stats` `auth_failures` |
 | Certificate expiry | sensor, timestamp | a board's `GET /api/tls/status` `not_after_epoch` |
 | Certificate renewal | sensor, enum | a board's `GET /api/acme` `state` (`idle`, `running`, `ok`, `failed`) |
@@ -106,7 +109,7 @@ Assistant cannot reach it.
 
 The certificate is shared, but only boards read it and run ACME, so it is
 asked of a board (the leader first), through the relay when needed, every
-ten minutes.
+ten minutes; a reading that reached no node comes again on the next refresh.
 
 ### Each node's device
 
