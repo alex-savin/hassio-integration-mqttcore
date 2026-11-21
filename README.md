@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="custom_components/mqttcore/brand/dark_logo@2x.png">
+    <img alt="MQTT Core" src="custom_components/mqttcore/brand/logo@2x.png" width="460">
+  </picture>
+</p>
+
 # MQTT Core for Home Assistant
 
 A custom Home Assistant integration that monitors an
