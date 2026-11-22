@@ -186,6 +186,7 @@ class MqttcoreClusterCoordinator(DataUpdateCoordinator[ClusterData]):
         )
         self._clients: dict[str, MqttcoreClient] = {}
         self._backoff_until: dict[str, float] = {}
+        self._refused: dict[str, str] = {}  # URL -> why it last refused the token
         self._certificate_at: float | None = None
         self._tls: TlsStatus | None = None
         self._acme: AcmeStatus | None = None
@@ -284,28 +285,35 @@ class MqttcoreClusterCoordinator(DataUpdateCoordinator[ClusterData]):
     # ---- refresh ------------------------------------------------------------------------
 
     async def _async_update_data(self) -> ClusterData:
-        """Read the cluster from the first node that answers."""
+        """Read the cluster from the first node that answers and takes the token.
+
+        A node that refuses the token speaks for itself: one whose copy has
+        not arrived yet, or one that sees Home Assistant from another address
+        than the token's networks (a container behind NAT, as Docker Desktop
+        shows every client from its own gateway). The other members are asked
+        too. Signing in again is asked for only when no node takes the token:
+        every node that answered refused it, or two did.
+        """
         last_error: MqttcoreError | None = None
+        refusals: list[MqttcoreAuthenticationError | MqttcoreForbiddenError] = []
+        unreached = 0
         for url in self.candidate_urls():
             client = self.client_for(url)
             try:
                 cluster = await client.get_cluster()
-            except MqttcoreAuthenticationError as err:
-                raise ConfigEntryAuthFailed(
-                    translation_domain=DOMAIN, translation_key="token_rejected"
-                ) from err
-            except MqttcoreForbiddenError as err:
-                raise ConfigEntryAuthFailed(
-                    translation_domain=DOMAIN,
-                    translation_key="token_refused",
-                    translation_placeholders={"error": err.message},
-                ) from err
+            except (MqttcoreAuthenticationError, MqttcoreForbiddenError) as err:
+                self._note_refusal(url, err)
+                self.mark_failed(url)
+                refusals.append(err)
+                continue
             except MqttcoreError as err:
                 LOGGER.debug("%s did not answer: %s", url, err)
                 self.mark_failed(url)
                 last_error = err
+                unreached += 1
                 continue
             self.mark_ok(url)
+            self._refused.pop(url, None)
             if url != self.active_url:
                 LOGGER.debug("Reading the cluster from %s", url)
             self.active_url = url
@@ -314,10 +322,37 @@ class MqttcoreClusterCoordinator(DataUpdateCoordinator[ClusterData]):
             return ClusterData(
                 cluster=cluster, endpoint=url, tls=self._tls, acme=self._acme
             )
+        if refusals and (unreached == 0 or len(refusals) >= 2):
+            first = refusals[0]
+            if isinstance(first, MqttcoreAuthenticationError):
+                raise ConfigEntryAuthFailed(
+                    translation_domain=DOMAIN, translation_key="token_rejected"
+                ) from first
+            raise ConfigEntryAuthFailed(
+                translation_domain=DOMAIN,
+                translation_key="token_refused",
+                translation_placeholders={"error": first.message},
+            ) from first
         raise UpdateFailed(
             translation_domain=DOMAIN,
             translation_key="cluster_unreachable",
-            translation_placeholders={"error": str(last_error)},
+            translation_placeholders={
+                "error": str(refusals[0] if refusals else last_error)
+            },
+        )
+
+    def _note_refusal(
+        self, url: str, err: MqttcoreAuthenticationError | MqttcoreForbiddenError
+    ) -> None:
+        """Say once, not at every refresh, that a node refuses the token, and why."""
+        if self._refused.get(url) == err.message:
+            LOGGER.debug("%s refuses the token: %s", url, err.message)
+            return
+        self._refused[url] = err.message
+        LOGGER.warning(
+            "%s refuses the API token (%s); the cluster is read through another member",
+            url,
+            err.message,
         )
 
     async def async_issue_certificate(self) -> None:

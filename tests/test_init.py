@@ -102,14 +102,64 @@ async def test_token_rejected_starts_reauth(
     aioclient_mock: AiohttpClientMocker,
     status: int,
 ) -> None:
-    """A revoked token (or one refused by its network limit) asks for reauth."""
+    """A token every member refuses (revoked, or not for this network) asks for reauth."""
     mock_cluster(
-        aioclient_mock, overrides={(URL01, "/api/cluster"): (status, {"error": "no"})}
+        aioclient_mock,
+        overrides={
+            (url, "/api/cluster"): (status, {"error": "no"})
+            for url in (URL01, URL04, URL05)
+        },
     )
     await _setup(hass, mock_config_entry)
     assert mock_config_entry.state is ConfigEntryState.SETUP_ERROR
     flows = hass.config_entries.flow.async_progress_by_handler(DOMAIN)
     assert [f["context"]["source"] for f in flows] == [SOURCE_REAUTH]
+
+
+@pytest.mark.parametrize("status", [401, 403])
+async def test_one_member_refusing_the_token_is_not_reauth(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+    caplog: pytest.LogCaptureFixture,
+    status: int,
+) -> None:
+    """One member refusing the token is that member's: the cluster is read elsewhere.
+
+    A container behind Docker Desktop's NAT sees Home Assistant from its
+    gateway, outside the token's networks; a member whose copy of the token
+    has not arrived yet answers 401. Neither means the token is gone.
+    """
+    refusal = {"error": "this API token is not for this network"}
+    mock_cluster(aioclient_mock, overrides={(URL01, "/api/cluster"): (status, refusal)})
+    await _setup(hass, mock_config_entry)
+    assert mock_config_entry.state is ConfigEntryState.LOADED
+    assert not hass.config_entries.flow.async_progress_by_handler(DOMAIN)
+    cluster = mock_config_entry.runtime_data.cluster
+    assert cluster.active_url == f"{URL04}/"
+    assert cluster.candidate_urls()[-1] == f"{URL01}/"  # asked last for a while
+    assert caplog.text.count("refuses the API token") == 1
+    await cluster.async_refresh()
+    assert (
+        caplog.text.count("refuses the API token") == 1
+    )  # said once, not every refresh
+
+
+async def test_one_refusal_with_the_rest_unreachable_waits(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """One member refuses and the others do not answer: retry later, no reauth."""
+    refusal = {"error": "this API token is not for this network"}
+    mock_cluster(
+        aioclient_mock,
+        down={URL04, URL05},
+        overrides={(URL01, "/api/cluster"): (403, refusal)},
+    )
+    await _setup(hass, mock_config_entry)
+    assert mock_config_entry.state is ConfigEntryState.SETUP_RETRY
+    assert not hass.config_entries.flow.async_progress_by_handler(DOMAIN)
 
 
 async def test_failover_to_another_member(

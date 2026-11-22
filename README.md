@@ -57,7 +57,12 @@ node:
    expires, and is named `home-assistant-<8 hex digits of this Home
    Assistant's instance ID>`. **Limit the token to** is filled in with the
    address Home Assistant reaches the node from; leave it, or empty it to
-   let the token work from anywhere.
+   let the token work from anywhere. Every member checks it against the
+   address *it* sees: a member in a container behind NAT (Docker Desktop
+   shows every client from its gateway, 192.168.65.1) refuses a token
+   limited to Home Assistant's own address. Add that address, or empty the
+   limit; until then Home Assistant reads that member through another's
+   relay.
 
 One entry per cluster: every member answers with the same identity (the
 cluster's DNS name, `server_name`), so a second member is refused as
@@ -65,7 +70,11 @@ already configured, and every board's mDNS announcement is recognised.
 
 If the token stops working (revoked, or the address limit no longer
 matches), Home Assistant asks for the OTA password again and mints a new
-token under the same name.
+token under the same name. One member refusing it is that member's (its
+copy has not arrived yet, or it sees another address): the cluster is read
+through another member, and the log says once which member refuses and
+why. Home Assistant asks to sign in again only when every member that
+answers refuses the token, or two of them do (0.2.3).
 
 Removing the integration does not revoke the token (only the OTA password
 can). Revoke it in the MQTT Core console (API tokens) or with
