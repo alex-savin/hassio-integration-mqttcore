@@ -256,7 +256,6 @@
     },
     "token_rights": {
       "title": "MQTT Core {title} needs a new token",
-      "description": "The token Home Assistant uses lacks rights for: {areas}. Fix it to sign in again.",
       "fix_flow": {
         "step": {
           "confirm": {
