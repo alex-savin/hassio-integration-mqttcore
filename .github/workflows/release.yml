@@ -1,0 +1,85 @@
+name: Release
+
+# The rule (CONTRIBUTING.md): all work happens on develop; main changes only
+# through a pull request from develop, opened when a release is ready, and
+# every release has a CHANGELOG.md section, which becomes its notes.
+#
+# - On a pull request to main, "Release check" (required by main's branch
+#   protection) refuses one whose manifest version has no changelog section,
+#   was released before, or that leaves entries under "## Unreleased".
+# - On a push to main (the merged pull request), the release is tagged
+#   v<version> and published with that section as its notes; the
+#   Marketplace then offers it. develop is then brought up to main.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Release check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: The version is new and its changelog section has entries
+        run: |
+          set -euo pipefail
+          manifest=$(ls custom_components/*/manifest.json)
+          version=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["version"])' "$manifest")
+          # A section runs from its "## " heading to the next one.
+          section() { awk -v v="$1" '/^## /{ if (on) exit; on = ($2 == v); next } on' CHANGELOG.md; }
+          notes=$(section "$version")
+          if [ -z "$(printf '%s' "$notes" | tr -d '[:space:]')" ]; then
+            echo "::error file=CHANGELOG.md::No '## $version — <date>' section with entries (the version in $manifest). See CONTRIBUTING.md, A release."
+            exit 1
+          fi
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            if [ -n "$(section Unreleased | tr -d '[:space:]')" ]; then
+              echo "::error file=CHANGELOG.md::'## Unreleased' still has entries: set the new version in $manifest and rename '## Unreleased' to '## <version> — <date>'."
+              exit 1
+            fi
+            if [ -n "$(git ls-remote --tags origin "refs/tags/v$version")" ]; then
+              echo "::error file=$manifest::v$version was released already: raise the version."
+              exit 1
+            fi
+          fi
+          echo "v$version: $(printf '%s\n' "$notes" | grep -c .) changelog lines"
+
+  release:
+    name: Publish the release
+    needs: check
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Tag v<version> and publish it with its changelog section
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          manifest=$(ls custom_components/*/manifest.json)
+          read -r version name < <(python3 -c 'import json, sys; m = json.load(open(sys.argv[1])); print(m["version"], m["name"])' "$manifest")
+          if [ -n "$(git ls-remote --tags origin "refs/tags/v$version")" ]; then
+            echo "v$version is published already: nothing to do"
+            exit 0
+          fi
+          awk -v v="$version" '/^## /{ if (on) exit; on = ($2 == v); next } on' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          gh release create "v$version" --target "$GITHUB_SHA" --title "$name $version" --notes-file "$RUNNER_TEMP/notes.md"
+      - name: Bring develop up to main
+        run: |
+          set -euo pipefail
+          git fetch origin develop
+          if git merge-base --is-ancestor origin/develop HEAD; then
+            git push origin HEAD:refs/heads/develop
+          else
+            echo "::notice::develop has commits main does not: left as it is"
+          fi
