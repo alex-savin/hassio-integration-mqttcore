@@ -30,3 +30,6 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
+          # No license yet: the owner's decision (2026-11-22), so the
+          # Marketplace's license check is skipped until one is chosen.
+          ignore: license
