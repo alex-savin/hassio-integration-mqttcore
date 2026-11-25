@@ -470,7 +470,11 @@
       "forwarded": 0,
       "served": 850,
       "failed": 0,
-      "syncs": 1
+      "syncs": 1,
+      "budget": 1048576,
+      "ceiling": 1048576,
+      "ceiling_refused": 0,
+      "near_full": false
     },
     "sessions": {
       "state": "leader",

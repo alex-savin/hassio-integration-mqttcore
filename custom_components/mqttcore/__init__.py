@@ -14,7 +14,7 @@ from homeassistant.helpers.typing import ConfigType
 from .const import DOMAIN
 from .coordinator import MqttcoreClusterCoordinator, MqttcoreNodeManager
 from .devices import cluster_device_kwargs, cluster_identifier, node_identifier
-from .repairs import async_check_token
+from .repairs import async_check_token, async_retained_issue
 from .services import async_setup_services
 
 PLATFORMS: list[Platform] = [
@@ -65,6 +65,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: MqttcoreConfigEntry) -> 
     entry.async_on_unload(nodes.async_shutdown)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    # Raft's retained set near its ceiling (MQTT Core 0.34.0 says so at
+    # 90 %): a repair while it lasts, gone once it is under 85 % again.
+    entry.async_on_unload(
+        cluster.async_add_listener(lambda: async_retained_issue(hass, entry))
+    )
+    async_retained_issue(hass, entry)
     # A token minted before 0.30.0 (or by integration 0.1) lacks rights the
     # entities and actions use: a repair offers a new one.
     entry.async_create_background_task(

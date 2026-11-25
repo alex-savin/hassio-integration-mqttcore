@@ -65,6 +65,8 @@ def state_of(hass: HomeAssistant, entity_id: str) -> str:
             "2026-11-01T08:12:00+00:00",
         ),
         ("sensor.mqtt_example_com_messages_received", STATE_UNKNOWN),
+        # 151804 of 1048576 bytes
+        ("sensor.mqtt_example_com_retained_set_used", "14.5"),
         # the board
         ("sensor.mqtt01_example_com_connections", "12"),
         ("sensor.mqtt01_example_com_sessions", "16"),

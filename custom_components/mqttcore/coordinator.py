@@ -51,6 +51,7 @@ from .const import (
     LOGGER,
     NODE_REMOVE_AFTER,
     NODE_SCAN_INTERVAL,
+    RETAINED_NEAR_FULL_PCT,
 )
 from .devices import node_device_details, node_identifier, node_is_board
 from .pymqttcore import (
@@ -122,6 +123,37 @@ class ClusterData:
         if node_id == LOCAL_NODE:
             return None
         return self.cluster.member(node_id)
+
+    def retained_used(self) -> float | None:
+        """The share of its ceiling Raft's retained set fills, in percent.
+
+        None when Raft carries no retained messages, or the node does not say
+        its ceiling (before MQTT Core 0.33.1).
+        """
+        raft = self.cluster.raft
+        if (
+            not self.clustered
+            or raft is None
+            or raft.retained_state == "off"
+            or raft.retained_ceiling <= 0
+        ):
+            return None
+        return 100.0 * raft.retained_bytes / raft.retained_ceiling
+
+    def retained_near_full(self) -> bool | None:
+        """Raft's retained set at 90 % of its ceiling or more.
+
+        As the node says (MQTT Core 0.34.0, with its way back under 85 %), or
+        from the figures for an older node. At the ceiling a new retained
+        message stays on the node it came to.
+        """
+        used = self.retained_used()
+        if used is None:
+            return None
+        raft = self.cluster.raft
+        if raft is not None and raft.retained_near_full is not None:
+            return raft.retained_near_full
+        return used >= RETAINED_NEAR_FULL_PCT
 
 
 @dataclass(slots=True)

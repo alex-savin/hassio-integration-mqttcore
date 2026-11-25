@@ -40,6 +40,9 @@
       "redirecting": {
         "default": "mdi:directions-fork"
       },
+      "retained_set_problem": {
+        "default": "mdi:database-alert"
+      },
       "settings_problem": {
         "default": "mdi:cog-sync"
       }
@@ -95,6 +98,9 @@
       },
       "retained": {
         "default": "mdi:pin"
+      },
+      "retained_set_used": {
+        "default": "mdi:database"
       },
       "sessions": {
         "default": "mdi:account-multiple"

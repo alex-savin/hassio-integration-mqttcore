@@ -104,6 +104,9 @@
       "redirecting": {
         "name": "Redirecting new clients"
       },
+      "retained_set_problem": {
+        "name": "Retained set"
+      },
       "settings_problem": {
         "name": "Shared settings"
       }
@@ -178,6 +181,9 @@
       "retained": {
         "name": "Retained messages"
       },
+      "retained_set_used": {
+        "name": "Retained set used"
+      },
       "sessions": {
         "name": "Sessions"
       },
@@ -250,9 +256,9 @@
     }
   },
   "issues": {
-    "update_rolled_back": {
-      "title": "{node} rolled back an update",
-      "description": "The board {node} did not confirm version {version} after installing it, and went back to {running}. It keeps running {running}; its log (MQTT Core's console, System → Logs) says why the new version did not start. This goes away once a later update succeeds."
+    "retained_set_near_full": {
+      "title": "MQTT Core {title}: the retained set is nearly full",
+      "description": "Raft's retained set fills {used} % of its ceiling ({kib} of {ceiling_kib} KiB, {topics} topics). The ceiling is what the smallest member's storage holds. At the ceiling, a new retained message stays on the node it was published to: a client connected to another node does not get it, nor does Home Assistant after it reconnects there. Fewer or smaller retained messages make room, for example by turning off discovery of entities you do not use. This goes away once the set is under 85 % again."
     },
     "token_rights": {
       "title": "MQTT Core {title} needs a new token",
@@ -264,6 +270,10 @@
           }
         }
       }
+    },
+    "update_rolled_back": {
+      "title": "{node} rolled back an update",
+      "description": "The board {node} did not confirm version {version} after installing it, and went back to {running}. It keeps running {running}; its log (MQTT Core's console, System → Logs) says why the new version did not start. This goes away once a later update succeeds."
     }
   },
   "services": {

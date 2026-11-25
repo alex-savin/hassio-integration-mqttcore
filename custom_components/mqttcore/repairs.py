@@ -1,11 +1,16 @@
-"""Repairs: a token without the maintenance right gets a new one by signing in again."""
+"""Repairs.
+
+- A token without the maintenance right gets a new one by signing in again.
+- Raft's retained set near its ceiling is said (it needs fewer or smaller
+  retained messages, nothing Home Assistant can do).
+"""
 
 from __future__ import annotations
 
 from typing import Any
 
 from homeassistant.components.repairs import RepairsFlow, RepairsFlowResult
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import issue_registry as ir
 
 from .const import DOMAIN, LOGGER, TOKEN_SCOPES
@@ -15,6 +20,38 @@ from .pymqttcore import MqttcoreError, MqttcoreNotFoundError
 def token_issue_id(entry_id: str) -> str:
     """The repair raised while the entry's token lacks rights the integration uses."""
     return f"token_rights_{entry_id}"
+
+
+def retained_issue_id(entry_id: str) -> str:
+    """The repair raised while the cluster's retained set is near its ceiling."""
+    return f"retained_set_near_full_{entry_id}"
+
+
+@callback
+def async_retained_issue(hass: HomeAssistant, entry: Any) -> None:
+    """Raise or clear the retained set's repair from the cluster's last reading."""
+    data = entry.runtime_data.cluster.data
+    issue_id = retained_issue_id(entry.entry_id)
+    if data is None or not data.retained_near_full():
+        ir.async_delete_issue(hass, DOMAIN, issue_id)
+        return
+    raft = data.cluster.raft
+    used = data.retained_used() or 0.0
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        issue_id,
+        is_fixable=False,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key="retained_set_near_full",
+        translation_placeholders={
+            "title": entry.title,
+            "used": f"{used:.0f}",
+            "kib": str(raft.retained_bytes // 1024 if raft else 0),
+            "ceiling_kib": str(raft.retained_ceiling // 1024 if raft else 0),
+            "topics": str(raft.retained_topics if raft else 0),
+        },
+    )
 
 
 def missing_rights(scopes: dict[str, str]) -> list[str]:

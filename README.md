@@ -107,11 +107,13 @@ it at all.
 | Connections | sensor | sum of `members[].load` of the live members |
 | Messages received / sent | sensor, msg/s | sum of the nodes' rates (below) |
 | Retained messages | sensor | `raft.retained.topics` (the cluster's one set; each node's own `$SYS` topics are not in it, but are in the node's count); without Raft, the largest node's `retained` |
+| Retained set used (diagnostic) | sensor, % | `raft.retained.bytes` of `raft.retained.ceiling` (what the smallest member's storage holds; MQTT Core 0.33.1 and later) |
 | Failed logins | sensor, total increasing | sum of the nodes' `GET /api/stats` `auth_failures` |
 | Certificate expiry | sensor, timestamp | a board's `GET /api/tls/status` `not_after_epoch` |
 | Certificate renewal | sensor, enum | a board's `GET /api/acme` `state` (`idle`, `running`, `ok`, `failed`) |
 | Last certificate renewal (diagnostic) | sensor, timestamp | `GET /api/acme` `last_success` |
 | Raft | binary sensor, problem | `raft.on` and (`raft.leader` null or `raft.stuck`) |
+| Retained set | binary sensor, problem | `raft.retained.near_full` (MQTT Core 0.34.0: from 90 % of the ceiling until under 85 %); for an older cluster, 90 % of the ceiling. At the ceiling a new retained message stays on the node it was published to |
 | Shared settings (diagnostic) | binary sensor, problem | a live member's `config_state` is `out-of-sync` or `diverged` |
 | Certificate | binary sensor, problem | `expired`, or ACME `state == "failed"`, or `name_missing` |
 | Load balancing (diagnostic) | binary sensor | `balance.enabled` |
@@ -165,7 +167,9 @@ counters start again from zero.
 - **Repairs:** a board that rolled an update back (it did not confirm the
   new version), and a token with less than the integration needs (made by
   0.1, or on a cluster before 0.30.0): fixing it signs in again, which
-  makes a new token.
+  makes a new token. Also, while the Retained set problem sensor is on, a
+  repair (not fixable from Home Assistant) says how full the set is and
+  what makes room.
 
 ### Actions (0.2.0)
 

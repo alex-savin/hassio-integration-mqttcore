@@ -55,6 +55,11 @@ UPDATE_SCAN_INTERVAL: Final = timedelta(minutes=1)
 UPDATE_PROGRESS_INTERVAL: Final = timedelta(seconds=5)
 UPDATE_CHECK_INTERVAL: Final = timedelta(hours=6)
 NODE_SCAN_INTERVAL: Final = timedelta(seconds=30)
+
+# Raft's retained set this full of its ceiling is a problem, as MQTT Core
+# 0.34.0 says it itself: at the ceiling a new retained message stays on the
+# node it came to.
+RETAINED_NEAR_FULL_PCT = 90.0
 DEVICE_REFRESH_INTERVAL: Final = timedelta(minutes=10)
 CERTIFICATE_REFRESH_INTERVAL: Final = timedelta(minutes=10)
 

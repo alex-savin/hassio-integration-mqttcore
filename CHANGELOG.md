@@ -14,6 +14,11 @@ was published. They are listed here for the record.
 
 ## Unreleased
 
+- The cluster's Raft retained set shows how full it is ("Retained set
+  used", a share of its ceiling), and a "Retained set" problem sensor and a
+  repair say when it reaches 90 % (MQTT Core 0.34.0 says so itself; for an
+  older cluster the figures decide). At the ceiling a new retained message
+  stays on the node it was published to.
 - The repair for a token with too few rights explains itself in its fix
   dialog only, as Home Assistant's checks require.
 

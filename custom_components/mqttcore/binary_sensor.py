@@ -77,6 +77,13 @@ CLUSTER_BINARY_SENSORS: tuple[MqttcoreClusterBinarySensorDescription, ...] = (
         ),
     ),
     MqttcoreClusterBinarySensorDescription(
+        key="retained_set_problem",
+        translation_key="retained_set_problem",
+        device_class=BinarySensorDeviceClass.PROBLEM,
+        is_on_fn=lambda d: d.retained_near_full(),
+        available_fn=lambda d: d.retained_used() is not None,
+    ),
+    MqttcoreClusterBinarySensorDescription(
         key="settings_problem",
         translation_key="settings_problem",
         device_class=BinarySensorDeviceClass.PROBLEM,

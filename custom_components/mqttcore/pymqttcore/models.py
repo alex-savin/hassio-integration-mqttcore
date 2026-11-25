@@ -479,6 +479,12 @@ class RaftStatus:
     store_errors: int
     retained_state: str
     retained_topics: int
+    # The set's bytes and what the leader lets it grow to (0: not said, a
+    # node before 0.33.1); near_full from 0.34.0 (None before).
+    retained_bytes: int
+    retained_ceiling: int
+    retained_ceiling_refused: int
+    retained_near_full: bool | None
     sessions_state: str
     sessions_entries: int
 
@@ -507,6 +513,10 @@ class RaftStatus:
             store_errors=_int(counters, "store_errors"),
             retained_state=_str(retained, "state", "off"),
             retained_topics=_int(retained, "topics"),
+            retained_bytes=_int(retained, "bytes"),
+            retained_ceiling=_int(retained, "ceiling"),
+            retained_ceiling_refused=_int(retained, "ceiling_refused"),
+            retained_near_full=_opt_bool(retained, "near_full"),
             sessions_state=_str(sessions, "state", "off"),
             sessions_entries=_int(sessions, "entries"),
         )

@@ -10,13 +10,14 @@ from pytest_homeassistant.test_util.aiohttp import AiohttpClientMocker
 from custom_components.mqttcore.repairs import (
     TokenRightsRepairFlow,
     missing_rights,
+    retained_issue_id,
     token_issue_id,
 )
 from homeassistant.config_entries import SOURCE_REAUTH
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 
-from .common import TOKEN_SELF, URL01, mock_cluster
+from .common import TOKEN_SELF, URL01, mock_cluster, refresh_all, view
 
 
 def test_missing_rights() -> None:
@@ -77,6 +78,71 @@ async def test_current_token_no_repair(
     assert (
         ir.async_get(hass).async_get_issue(
             "mqttcore", token_issue_id(init_integration.entry_id)
+        )
+        is None
+    )
+
+
+async def test_retained_set_near_full(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """The node says the set is near its ceiling: a problem and a repair, until it is not."""
+    issues = ir.async_get(hass)
+    issue_id = retained_issue_id(init_integration.entry_id)
+    assert issues.async_get_issue("mqttcore", issue_id) is None
+    cluster = view("mqtt01")
+    cluster["raft"]["retained"] |= {"bytes": 955000, "topics": 1030, "near_full": True}
+    aioclient_mock.clear_requests()
+    mock_cluster(aioclient_mock, overrides={(URL01, "/api/cluster"): (200, cluster)})
+    await refresh_all(hass, init_integration)
+    assert hass.states.get("binary_sensor.mqtt_example_com_retained_set").state == "on"
+    assert hass.states.get("sensor.mqtt_example_com_retained_set_used").state == "91.1"
+    issue = issues.async_get_issue("mqttcore", issue_id)
+    assert issue is not None
+    assert not issue.is_fixable
+    assert issue.translation_placeholders == {
+        "title": init_integration.title,
+        "used": "91",
+        "kib": "932",
+        "ceiling_kib": "1024",
+        "topics": "1030",
+    }
+    # Under 85 % again, as the node says: gone.
+    cluster["raft"]["retained"] |= {"bytes": 880000, "near_full": False}
+    aioclient_mock.clear_requests()
+    mock_cluster(aioclient_mock, overrides={(URL01, "/api/cluster"): (200, cluster)})
+    await refresh_all(hass, init_integration)
+    assert hass.states.get("binary_sensor.mqtt_example_com_retained_set").state == "off"
+    assert issues.async_get_issue("mqttcore", issue_id) is None
+
+
+async def test_retained_set_near_full_before_0_34(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """A node that does not say near_full: 90 % of its ceiling decides."""
+    cluster = view("mqtt01")
+    del cluster["raft"]["retained"]["near_full"]
+    cluster["raft"]["retained"]["bytes"] = 950000
+    aioclient_mock.clear_requests()
+    mock_cluster(aioclient_mock, overrides={(URL01, "/api/cluster"): (200, cluster)})
+    await refresh_all(hass, init_integration)
+    assert hass.states.get("binary_sensor.mqtt_example_com_retained_set").state == "on"
+    # Without a ceiling (before 0.33.1) there is nothing to say.
+    del cluster["raft"]["retained"]["ceiling"]
+    aioclient_mock.clear_requests()
+    mock_cluster(aioclient_mock, overrides={(URL01, "/api/cluster"): (200, cluster)})
+    await refresh_all(hass, init_integration)
+    assert (
+        hass.states.get("binary_sensor.mqtt_example_com_retained_set").state
+        == "unavailable"
+    )
+    assert (
+        ir.async_get(hass).async_get_issue(
+            "mqttcore", retained_issue_id(init_integration.entry_id)
         )
         is None
     )

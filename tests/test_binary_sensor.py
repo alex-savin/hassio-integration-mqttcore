@@ -25,6 +25,7 @@ def state_of(hass: HomeAssistant, entity_id: str) -> str:
     ("entity_id", "expected"),
     [
         ("binary_sensor.mqtt_example_com_raft", "off"),
+        ("binary_sensor.mqtt_example_com_retained_set", "off"),
         ("binary_sensor.mqtt_example_com_shared_settings", "off"),
         ("binary_sensor.mqtt_example_com_certificate", "off"),
         ("binary_sensor.mqtt_example_com_load_balancing", "on"),

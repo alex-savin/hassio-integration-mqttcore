@@ -13,7 +13,12 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import EntityCategory, UnitOfDataRate, UnitOfInformation
+from homeassistant.const import (
+    PERCENTAGE,
+    EntityCategory,
+    UnitOfDataRate,
+    UnitOfInformation,
+)
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.typing import StateType
@@ -88,6 +93,10 @@ def _acme_state(data: ClusterData) -> str | None:
     return data.acme.state
 
 
+def _round1(value: float | None) -> float | None:
+    return None if value is None else round(value, 1)
+
+
 CLUSTER_SENSORS: tuple[MqttcoreClusterSensorDescription, ...] = (
     MqttcoreClusterSensorDescription(
         key="members_alive",
@@ -109,6 +118,16 @@ CLUSTER_SENSORS: tuple[MqttcoreClusterSensorDescription, ...] = (
         translation_key="leader",
         value_fn=_leader,
         available_fn=lambda d: d.clustered,
+    ),
+    MqttcoreClusterSensorDescription(
+        key="retained_set_used",
+        translation_key="retained_set_used",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda d: _round1(d.retained_used()),
+        available_fn=lambda d: d.retained_used() is not None,
     ),
     MqttcoreClusterSensorDescription(
         key="raft_term",
